@@ -22,25 +22,47 @@ impl SourceId {
         Self(SOURCE_ID_COUNTER.fetch_add(1, Ordering::SeqCst))
     }
 
-    /// TODO
-    pub fn null() -> Self {
+    /// **ONLY FOR TESTING METHODS**
+    pub const fn null() -> Self {
         Self(0)
     }
 }
 
 /// A start and end line and column. Also contains trace of original source
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Span(pub usize, pub usize, pub usize, pub usize, pub SourceId);
+pub struct Span {
+	pub line_start: usize, 
+	pub column_start: usize, 
+	pub line_end: usize, 
+	pub column_end: usize, 
+	pub source_id: SourceId
+}
 
 impl Span {
     /// Returns whether the end of `self` is the start of `other`
     pub fn is_adjacent_to(&self, other: &Self) -> bool {
-        self.4 == other.4 && self.2 == other.0 && self.3 == other.1
+        self.source_id == other.source_id && self.line_end == other.line_start && self.column_end == other.column_start
     }
 
     /// Returns a new [`Span`] which starts at the start of `self` a ends at the end of `other`
     pub fn union(&self, other: &Self) -> Span {
-        Span(self.0, self.1, other.2, other.3, self.4.clone())
+        Span {
+            line_start: self.line_start, 
+            column_start: self.column_start, 
+            line_end: other.line_end, 
+            column_end: other.column_end, 
+            source_id: self.source_id.clone()
+        }
+    }
+
+    /// Returns whether self finishes on a line whether other starts
+    /// Not commutative
+    pub fn is_on_same_line(&self, other: &Self) -> bool {
+        self.line_end == other.line_start
+    }
+
+    pub fn is_on_one_line(&self) -> bool {
+        self.line_start == self.line_end
     }
 }
 
@@ -247,7 +269,7 @@ impl SourceMap {
 
 #[cfg(test)]
 mod source_map_tests {
-    use super::vlq_encode_integer_to_buffer;
+    use super::{vlq_encode_integer_to_buffer, Span, SourceId};
 
     fn vlq_encode_integer(value: isize) -> String {
         let mut buf = String::new();
@@ -262,5 +284,68 @@ mod source_map_tests {
         assert_eq!(vlq_encode_integer(-1), "D");
         assert_eq!(vlq_encode_integer(123), "2H");
         assert_eq!(vlq_encode_integer(123456789), "qxmvrH");
+    }
+
+    #[test]
+    fn same_line() {
+        let span = Span {
+            line_start: 4,
+            line_end: 5,
+            column_start: 2,
+            column_end: 2,
+            source_id: SourceId::null()
+        };
+        assert!(span.is_on_same_line(&Span {
+            line_start: 5,
+            line_end: 5,
+            column_start: 5,
+            column_end: 7,
+            source_id: SourceId::null()
+        }));
+        assert!(!span.is_on_same_line(&Span {
+            line_start: 20,
+            line_end: 20,
+            column_start: 1,
+            column_end: 8,
+            source_id: SourceId::null()
+        }));
+    }
+
+    #[test]
+    fn one_line() {
+        let span = Span {
+            line_start: 2,
+            line_end: 2,
+            column_start: 2,
+            column_end: 2,
+            source_id: SourceId::null()
+        };
+        assert!(span.is_on_one_line());
+        let span = Span {
+            line_start: 4,
+            line_end: 5,
+            column_start: 2,
+            column_end: 2,
+            source_id: SourceId::null()
+        };
+        assert!(!span.is_on_one_line());
+    }
+
+    #[test]
+    fn adjacent() {
+        let span = Span {
+            line_start: 1,
+            line_end: 1,
+            column_start: 2,
+            column_end: 3,
+            source_id: SourceId::null()
+        };
+        assert!(span.is_adjacent_to(&Span {
+            line_start: 1,
+            line_end: 1,
+            column_start: 3,
+            column_end: 5,
+            source_id: SourceId::null()
+        }));
     }
 }
