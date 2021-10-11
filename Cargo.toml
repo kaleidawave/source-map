@@ -1,14 +1,13 @@
-
 [package]
-name        = "source-map"
-version     = "0.2.0"
-authors     = ["kaleidawave <kaleidawave@gmail.com>"]
-edition     = "2018"
+name = "source-map"
+version = "0.2.0"
+authors = ["kaleidawave <kaleidawave@gmail.com>"]
+edition = "2018"
 description = "Utilities for building source maps (v3) for a compiler"
-license     = "MIT"
-keywords    = ["source-map"]
-categories  = ["web-programming"]
-repository  = "https://github.com/kaleidawave/source-map"
+license = "MIT"
+keywords = ["source-map"]
+categories = ["web-programming"]
+repository = "https://github.com/kaleidawave/source-map"
 
 [dependencies]
 lazy_static = "1.4.0"
