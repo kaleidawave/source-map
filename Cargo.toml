@@ -1,6 +1,6 @@
 [package]
 name = "source-map"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["kaleidawave <kaleidawave@gmail.com>"]
 edition = "2018"
 description = "Utilities for building source maps (v3) for a compiler"
