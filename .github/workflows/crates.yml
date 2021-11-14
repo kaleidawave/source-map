@@ -27,22 +27,20 @@ jobs:
       - name: Install cargo edit
         run: cargo install cargo-edit
       - name: Set version semver
-        id: versioner
         if: ${{ contains(github.event.inputs.version, '.') }}
         run: 
-          echo "::set-output name=newVersion::$( cargo set-version ${{ github.event.inputs.version }} | awk '{print $NF}'  )"
+          echo "newVersion=$( cargo set-version ${{ github.event.inputs.version }} | awk '{print $NF}'  )" >> $GITHUB_ENV
       - name: Set version bump
-        id: versioner
         if: ${{ !contains(github.event.inputs.version, '.') }}
         run: 
-          echo "::set-output name=newVersion::$( cargo set-version --bump ${{ github.event.inputs.version }} | awk '{print $NF}' )"
+          echo "newVersion=$( cargo set-version --bump ${{ github.event.inputs.version }} | awk '{print $NF}' )" >> $GITHUB_ENV
       - name: Publish on crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: cargo publish --allow-dirty
       - name: Push updated Cargo.toml
         run: |
-          git tag "v${{ steps.versioner.outputs.newVersion }}"
+          git tag "v${{ env.newVersion }}"
           git add .
-          git commit -m "Release: ${{ steps.versioner.outputs.newVersion }}"
+          git commit -m "Release: ${{ env.newVersion }}"
           git push --tags origin main
