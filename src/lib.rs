@@ -1,94 +1,10 @@
-use lazy_static::lazy_static;
-use std::{
-    collections::HashMap,
-    sync::{
-        atomic::{AtomicU8, Ordering as AtomicMemoryOrdering},
-        RwLock,
-    },
-};
+mod source_id;
 mod span;
+mod to_string;
+
+pub use source_id::SourceId;
 pub use span::Span;
-
-lazy_static! {
-    pub static ref SOURCE_IDS: RwLock<HashMap<SourceId, (String, Option<String>)>> =
-        RwLock::new(HashMap::new());
-}
-
-static SOURCE_ID_COUNTER: AtomicU8 = AtomicU8::new(1);
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub struct SourceId(pub u8);
-
-impl SourceId {
-    pub fn new() -> Self {
-        Self(SOURCE_ID_COUNTER.fetch_add(1, AtomicMemoryOrdering::SeqCst))
-    }
-
-    /// **ONLY FOR TESTING METHODS**
-    pub const fn null() -> Self {
-        Self(0)
-    }
-}
-
-/// A structure with a buffer and *optional* corresponding [`SourceMap`]
-pub struct ToStringer<'a>(&'a mut String, Option<&'a mut SourceMap>);
-
-impl<'a> ToStringer<'a> {
-    pub fn with_source_map(buf: &'a mut String, source_map: &'a mut SourceMap) -> Self {
-        Self(buf, Some(source_map))
-    }
-
-    pub fn without_source_map(buf: &'a mut String) -> Self {
-        Self(buf, None)
-    }
-}
-
-impl ToStringer<'_> {
-    pub fn push(&mut self, chr: char) {
-        if let Some(ref mut source_map) = self.1 {
-            source_map.add_to_column(chr.len_utf16());
-        }
-        self.0.push(chr);
-    }
-
-    pub fn push_new_line(&mut self) {
-        if let Some(ref mut source_map) = self.1 {
-            source_map.add_new_line();
-        }
-        self.0.push('\n');
-    }
-
-    pub fn push_str(&mut self, slice: &str) {
-        if let Some(ref mut source_map) = self.1 {
-            source_map.add_to_column(slice.chars().count());
-        }
-        self.0.push_str(slice);
-    }
-
-    /// Used to push slices that may contain new lines
-    pub fn push_str_contains_new_line(&mut self, slice: &str) {
-        if let Some(source_map) = self.1.as_mut() {
-            for chr in slice.chars() {
-                if chr == '\n' {
-                    source_map.add_new_line()
-                }
-            }
-        }
-        self.0.push_str(slice);
-    }
-
-    /// Adds a mapping of the from a original position in the source to the position in the current buffer
-    pub fn add_mapping(
-        &mut self,
-        original_line: usize,
-        original_column: usize,
-        source_id: SourceId,
-    ) {
-        if let Some(ref mut source_map) = self.1 {
-            source_map.add_mapping(original_line, original_column, source_id);
-        }
-    }
-}
+pub use to_string::{ToString, Counter, SourceMapBuilder};
 
 const BASE64_ALPHABET: &'static [u8; 64] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -127,13 +43,12 @@ pub struct SourceMap {
     /// The current position in source. Used for relativeness
     last_source_line: u16,
     last_source_column: isize,
-    sources: Vec<(String, Option<String>)>,
     /// Maps source ids to position in sources vector
-    sources_map: HashMap<SourceId, u8>,
+    sources_used: Vec<SourceId>,
 }
 
 impl SourceMap {
-    pub fn new() -> Self {
+    pub fn new() -> SourceMap {
         SourceMap {
             buf: String::new(),
             line: 0,
@@ -142,8 +57,7 @@ impl SourceMap {
             last_column: 0,
             last_source_line: 0,
             last_source_column: 0,
-            sources: Vec::new(),
-            sources_map: HashMap::new(),
+            sources_used: Vec::new(),
         }
     }
 
@@ -166,18 +80,16 @@ impl SourceMap {
         // Add column - self.last_column as isize
         let column_offset = self.column as isize - self.last_column as isize;
         vlq_encode_integer_to_buffer(buf, column_offset);
-        // If the source in map
-        if let Some(idx) = self.sources_map.get(&source_id) {
-            vlq_encode_integer_to_buffer(buf, *idx as isize);
+        // Find idx or insert source and get id
+        let idx = if let Some(idx) = self.sources_used.iter().position(|sid| *sid == source_id) {
+            idx
         } else {
-            // Else get it from the global
-            let source_name = SOURCE_IDS.read().unwrap().get(&source_id).unwrap().clone();
-            // And add it to the map
-            self.sources.push(source_name);
-            let idx = (self.sources.len() - 1) as u8;
-            self.sources_map.insert(source_id, idx);
-            vlq_encode_integer_to_buffer(buf, idx as isize);
-        }
+            self.sources_used.push(source_id);
+            self.sources_used.len() - 1
+        };
+        // Encode index of source
+        vlq_encode_integer_to_buffer(buf, idx as isize);
+
         vlq_encode_integer_to_buffer(
             buf,
             original_line as isize - 1 - self.last_source_line as isize,
@@ -202,24 +114,20 @@ impl SourceMap {
         self.column += length as u8;
     }
 
-    // TODO kinda temp
-    pub fn add_source(&mut self, name: String, content: Option<String>) {
-        self.sources.push((name, content))
-    }
-
     pub fn to_string(self) -> String {
         let mut source_names = String::new();
         let mut source_contents = String::new();
-        for (idx, (source_name, source_content)) in self.sources.iter().enumerate() {
+        for (idx, source_id) in self.sources_used.iter().enumerate() {
+            let (source_path, source_content) = source_id.get_file().unwrap();
             source_names.push('"');
-            source_names.push_str(&source_name.replace('\\', "\\\\"));
+            source_names.push_str(source_path.to_str().unwrap());
             source_names.push('"');
+
             source_contents.push('"');
-            if let Some(content) = &source_content {
-                source_contents.push_str(&content.replace('\n', "\\n").replace('\r', ""));
-            }
+            source_contents.push_str(&source_content.replace('\n', "\\n").replace('\r', ""));
             source_contents.push('"');
-            if idx < self.sources.len() - 1 {
+
+            if idx < self.sources_used.len() - 1 {
                 source_names.push(',');
                 source_contents.push(',');
             }

@@ -24,10 +24,18 @@ jobs:
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
-      - name: Install cargo edit (fork)
-        run: cargo install --git https://github.com/kaleidawave/cargo-edit --branch new-set-version-options cargo-edit
+      - name: Install cargo edit
+        run: cargo install cargo-edit
       - name: Set version semver
-        run: echo "::set-output name=newVersion::$( cargo set-version --output-new-version --panic-if-equal --raw ${{ github.event.inputs.version }} )"
+        id: versioner
+        if: ${{ contains(github.event.inputs.version, '.') }}
+        run: 
+          echo "::set-output name=newVersion::$( cargo set-version ${{ github.event.inputs.version }} | awk '{print $NF}'  )"
+      - name: Set version bump
+        id: versioner
+        if: ${{ !contains(github.event.inputs.version, '.') }}
+        run: 
+          echo "::set-output name=newVersion::$( cargo set-version --bump ${{ github.event.inputs.version }} | awk '{print $NF}' )"
       - name: Publish on crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
