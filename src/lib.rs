@@ -4,7 +4,7 @@ mod to_string;
 
 pub use source_id::SourceId;
 pub use span::Span;
-pub use to_string::{ToString, Counter, SourceMapBuilder};
+pub use to_string::{Counter, SourceMapBuilder, ToString};
 
 const BASE64_ALPHABET: &'static [u8; 64] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

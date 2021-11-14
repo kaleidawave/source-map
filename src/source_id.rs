@@ -1,9 +1,16 @@
-use std::{collections::HashMap, path::PathBuf, sync::{RwLock, atomic::{AtomicU8, Ordering}}};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicU8, Ordering},
+        RwLock,
+    },
+};
 
 use lazy_static::lazy_static;
 
 lazy_static! {
-    /// Maps source ids to paths and content 
+    /// Maps source ids to paths and content
     static ref SOURCE_IDS_TO_FILES: RwLock<HashMap<SourceId, (PathBuf, String)>> =
         RwLock::new(HashMap::new());
 }
