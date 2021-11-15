@@ -1,4 +1,4 @@
-use crate::{SourceId, SourceMap};
+use crate::{SourceMapBuilder, Span};
 
 pub trait ToString {
     fn push(&mut self, chr: char);
@@ -11,7 +11,7 @@ pub trait ToString {
     fn push_str_contains_new_line(&mut self, string: &str);
 
     /// Adds a mapping of the from a original position in the source to the position in the current buffer
-    fn add_mapping(&mut self, original_line: usize, original_column: usize, source_id: SourceId);
+    fn add_mapping(&mut self, source_span: &Span);
 }
 
 impl ToString for String {
@@ -31,41 +31,40 @@ impl ToString for String {
         self.push_str(string)
     }
 
-    fn add_mapping(
-        &mut self,
-        _original_line: usize,
-        _original_column: usize,
-        _source_id: SourceId,
-    ) {
+    fn add_mapping(&mut self, _source_span: &Span) {}
+}
+
+pub struct StringWithSourceMap(String, SourceMapBuilder);
+
+impl StringWithSourceMap {
+    pub fn new() -> Self {
+        Self(String::new(), SourceMapBuilder::new())
+    }
+
+    /// Returns source and the source map
+    /// TODO better return type
+    pub fn build(self) -> (String, String) {
+        (self.0, self.1.build())
     }
 }
 
-/// A structure with a buffer and *optional* corresponding [`SourceMap`]
-pub struct SourceMapBuilder<'a>(&'a mut String, &'a mut SourceMap);
-
-impl<'a> SourceMapBuilder<'a> {
-    pub fn new(buf: &'a mut String, source_map: &'a mut SourceMap) -> Self {
-        Self(buf, source_map)
-    }
-}
-
-impl SourceMapBuilder<'_> {
-    pub fn push(&mut self, chr: char) {
+impl ToString for StringWithSourceMap {
+    fn push(&mut self, chr: char) {
         self.1.add_to_column(chr.len_utf16());
         self.0.push(chr);
     }
 
-    pub fn push_new_line(&mut self) {
+    fn push_new_line(&mut self) {
         self.1.add_new_line();
         self.0.push('\n');
     }
 
-    pub fn push_str(&mut self, slice: &str) {
+    fn push_str(&mut self, slice: &str) {
         self.1.add_to_column(slice.chars().count());
         self.0.push_str(slice);
     }
 
-    pub fn push_str_contains_new_line(&mut self, slice: &str) {
+    fn push_str_contains_new_line(&mut self, slice: &str) {
         for chr in slice.chars() {
             if chr == '\n' {
                 self.1.add_new_line()
@@ -74,14 +73,8 @@ impl SourceMapBuilder<'_> {
         self.0.push_str(slice);
     }
 
-    pub fn add_mapping(
-        &mut self,
-        original_line: usize,
-        original_column: usize,
-        source_id: SourceId,
-    ) {
-        self.1
-            .add_mapping(original_line, original_column, source_id);
+    fn add_mapping(&mut self, source_span: &Span) {
+        self.1.add_mapping(source_span);
     }
 }
 
@@ -115,13 +108,7 @@ impl ToString for Counter {
         self.0 += string.len();
     }
 
-    fn add_mapping(
-        &mut self,
-        _original_line: usize,
-        _original_column: usize,
-        _source_id: SourceId,
-    ) {
-    }
+    fn add_mapping(&mut self, _source_span: &Span) {}
 }
 
 #[cfg(test)]
