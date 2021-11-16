@@ -24,6 +24,10 @@ impl Span {
             source_id: self.source_id,
         }
     }
+
+    pub fn into_range(self) -> Range<usize> {
+        self.into()
+    }
 }
 
 impl Into<Range<usize>> for Span {
