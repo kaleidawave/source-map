@@ -8,10 +8,10 @@ use std::{
 };
 
 pub use source_id::SourceId;
-pub use span::Span;
+pub use span::{LineColumnPosition, LineColumnSpan, Position, Span};
 pub use to_string::{Counter, StringWithSourceMap, ToString};
 
-const BASE64_ALPHABET: &'static [u8; 64] =
+const BASE64_ALPHABET: &[u8; 64] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 /// Adapted from [vlq](https://github.com/Rich-Harris/vlq/blob/822db3f22bf09148b84e8ef58878d11f3bcd543e/src/vlq.ts#L63)
@@ -51,6 +51,7 @@ enum MappingOrBreak {
 }
 
 /// Struct for building a [source map (v3)](https://sourcemaps.info/spec.html)
+#[derive(Default)]
 pub struct SourceMapBuilder {
     current_output_line: usize,
     current_output_column: usize,
@@ -63,14 +64,7 @@ pub struct SourceMapBuilder {
 
 impl SourceMapBuilder {
     pub fn new() -> SourceMapBuilder {
-        SourceMapBuilder {
-            current_output_line: 0,
-            last_output_line: None,
-            current_output_column: 0,
-            last_output_column: 0,
-            mappings: Vec::new(),
-            used_sources: HashSet::new(),
-        }
+        SourceMapBuilder::default()
     }
 
     // Record a new line was added to output

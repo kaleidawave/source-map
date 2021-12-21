@@ -11,3 +11,7 @@ repository = "https://github.com/kaleidawave/source-map"
 
 [dependencies]
 lazy_static = "1.4.0"
+lsp-types = { version = "0.91.1", optional = true }
+
+[features]
+lsp-types-morphisms = ["lsp-types"]

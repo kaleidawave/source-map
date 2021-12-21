@@ -34,11 +34,12 @@ impl ToString for String {
     fn add_mapping(&mut self, _source_span: &Span) {}
 }
 
+#[derive(Default)]
 pub struct StringWithSourceMap(String, SourceMapBuilder);
 
 impl StringWithSourceMap {
     pub fn new() -> Self {
-        Self(String::new(), SourceMapBuilder::new())
+        Self::default()
     }
 
     /// Returns source and the source map
@@ -79,11 +80,12 @@ impl ToString for StringWithSourceMap {
 }
 
 /// Used for getting **byte count** of the result if serialized
+#[derive(Default)]
 pub struct Counter(usize);
 
 impl Counter {
     pub fn new() -> Self {
-        Self(0)
+        Self::default()
     }
 
     pub fn get_count(self) -> usize {
