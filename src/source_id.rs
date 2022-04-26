@@ -19,6 +19,7 @@ lazy_static! {
 static SOURCE_ID_COUNTER: AtomicU8 = AtomicU8::new(1);
 
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature = "span-serialize", derive(serde::Serialize))]
 pub struct SourceId(u8);
 
 impl fmt::Debug for SourceId {
@@ -39,9 +40,7 @@ impl SourceId {
     }
 
     /// For content which does not have a source file **use with caution**
-    pub const fn new_null() -> Self {
-        Self(0)
-    }
+    pub const NULL: Self = Self(0);
 
     pub const fn is_null(&self) -> bool {
         self.0 == 0

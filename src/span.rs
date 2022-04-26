@@ -4,6 +4,7 @@ use super::SourceId;
 
 /// A start and end. Also contains trace of original source
 #[derive(PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "span-serialize", derive(serde::Serialize))]
 pub struct Span {
     pub start: usize,
     pub end: usize,
@@ -233,7 +234,7 @@ Another line";
         let paragraph_span = Span {
             start: 19,
             end: 28,
-            source_id: SourceId::new_null(),
+            source_id: SourceId::NULL,
         };
         assert_eq!(&SOURCE[Range::from(paragraph_span.clone())], "paragraph");
 
@@ -276,7 +277,7 @@ Another line";
             line_end: 2,
             column_end: 12,
         };
-        let line_another_span = line_another_span.into_scalar_span(SOURCE, SourceId::new_null());
+        let line_another_span = line_another_span.into_scalar_span(SOURCE, SourceId::NULL);
         assert_eq!(
             &SOURCE[Range::from(line_another_span)],
             "lines\nAnother line"

@@ -37,11 +37,12 @@ fn vlq_encode_integer_to_buffer(buf: &mut String, mut value: isize) {
 
 #[derive(Debug)]
 struct SourceMapping {
-    pub(crate) on_output_line: usize,
     pub(crate) on_output_column: usize,
     pub(crate) source_byte_start: usize,
-    pub(crate) source_byte_end: usize,
     pub(crate) from_source: SourceId,
+    // TODO are these needed
+    // pub(crate) on_output_line: usize,
+    // pub(crate) source_byte_end: usize,
 }
 
 #[derive(Debug)]
@@ -84,7 +85,8 @@ impl SourceMapBuilder {
     pub fn add_mapping(&mut self, source_position: &Span) {
         let Span {
             start: source_byte_start,
-            end: source_byte_end,
+            // TODO should it read this
+            end: _source_byte_end,
             source_id: from_source,
         } = source_position;
 
@@ -93,13 +95,14 @@ impl SourceMapBuilder {
         self.mappings.push(MappingOrBreak::Mapping(SourceMapping {
             from_source: *from_source,
             source_byte_start: *source_byte_start,
-            source_byte_end: *source_byte_end,
-            on_output_line: self.current_output_line,
             on_output_column: self.current_output_column,
+            // source_byte_end: *source_byte_end,
+            // on_output_line: self.current_output_line,
         }));
     }
 
     pub fn build(self) -> String {
+        // Splits are indexes of new lines in the source
         let mut source_line_splits = HashMap::<SourceId, Vec<_>>::new();
         let mut source_ids = Vec::<SourceId>::new();
         let mut source_paths = Vec::<PathBuf>::new();
@@ -134,8 +137,8 @@ impl SourceMapBuilder {
                         on_output_column,
                         source_byte_start,
                         // TODO are these needed:
-                        on_output_line: _,
-                        source_byte_end: _,
+                        // on_output_line: _,
+                        // source_byte_end: _,
                         from_source,
                     } = mapping;
 
@@ -178,14 +181,19 @@ impl SourceMapBuilder {
                                     .enumerate()
                                     .find_map(|(line, window)| {
                                         if let [floor, ceil] = window {
-                                            (*floor <= source_byte_start
-                                                && source_byte_start <= *ceil)
-                                                .then(|| (line + 1, source_byte_start - floor - 1))
+                                            if *floor < source_byte_start
+                                                && source_byte_start <= *ceil
+                                            {
+                                                Some((line + 1, source_byte_start - floor - 1))
+                                            } else {
+                                                None
+                                            }
                                         } else {
                                             unreachable!()
                                         }
                                     })
-                                    .unwrap()
+                                    // TODO temp:
+                                    .unwrap_or_else(|| dbg!(0, source_byte_start))
                             }
                         }
                     };
