@@ -1,9 +1,12 @@
+#![allow(clippy::useless_conversion)]
+
 mod source_id;
 mod span;
 mod to_string;
 
 use std::{
     collections::{HashMap, HashSet},
+    convert::TryInto,
     path::PathBuf,
 };
 
@@ -88,13 +91,13 @@ impl SourceMapBuilder {
             // TODO should it read this
             end: _source_byte_end,
             source_id: from_source,
-        } = source_position;
+        } = source_position.clone();
 
-        self.used_sources.insert(*from_source);
+        self.used_sources.insert(from_source);
 
         self.mappings.push(MappingOrBreak::Mapping(SourceMapping {
-            from_source: *from_source,
-            source_byte_start: *source_byte_start,
+            from_source,
+            source_byte_start: source_byte_start.try_into().unwrap(),
             on_output_column: self.current_output_column,
             // source_byte_end: *source_byte_end,
             // on_output_line: self.current_output_line,

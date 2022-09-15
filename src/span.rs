@@ -1,25 +1,20 @@
-use std::{fmt, ops::Range, str::CharIndices};
+use std::{convert::TryInto, fmt, ops::Range, str::CharIndices};
 
 use super::SourceId;
 
 /// A start and end. Also contains trace of original source
 #[derive(PartialEq, Eq, Clone)]
-#[cfg(not(feature = "u32-span"))]
 #[cfg_attr(feature = "span-serialize", derive(serde::Serialize))]
 pub struct Span {
-    pub start: usize,
-    pub end: usize,
+    pub start: ByteMarker,
+    pub end: ByteMarker,
     pub source_id: SourceId,
 }
 
-#[derive(PartialEq, Eq, Clone)]
+#[cfg(not(feature = "u32-span"))]
+pub type ByteMarker = usize;
 #[cfg(feature = "u32-span")]
-#[cfg_attr(feature = "span-serialize", derive(serde::Serialize))]
-pub struct Span {
-    pub start: u32,
-    pub end: u32,
-    pub source_id: SourceId,
-}
+pub type ByteMarker = u32;
 
 impl fmt::Debug for Span {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -57,6 +52,7 @@ impl Span {
         let (line_start, column_start) =
             get_line_column_from_string_and_idx(start, &mut char_indices);
         let (line_end, column_end) = get_line_column_from_string_and_idx(end, &mut char_indices);
+
         LineColumnSpan {
             line_start,
             column_start,
@@ -66,8 +62,8 @@ impl Span {
     }
 }
 
-impl From<Span> for Range<usize> {
-    fn from(span: Span) -> Range<usize> {
+impl From<Span> for Range<ByteMarker> {
+    fn from(span: Span) -> Range<ByteMarker> {
         Range {
             start: span.start,
             end: span.end,
@@ -75,8 +71,18 @@ impl From<Span> for Range<usize> {
     }
 }
 
+#[cfg(feature = "u32-span")]
+impl From<Span> for Range<usize> {
+    fn from(span: Span) -> Range<usize> {
+        Range {
+            start: span.start.try_into().unwrap(),
+            end: span.end.try_into().unwrap(),
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Clone)]
-pub struct Position(pub usize);
+pub struct Position(pub ByteMarker);
 
 impl fmt::Debug for Position {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -93,9 +99,12 @@ impl Position {
 }
 
 /// Returns `(line, column)`
-fn get_line_column_from_string_and_idx(end: usize, char_indices: &mut CharIndices) -> (u32, u32) {
+fn get_line_column_from_string_and_idx(
+    end: ByteMarker,
+    char_indices: &mut CharIndices,
+) -> (u32, u32) {
     let (mut line, mut column) = (0, 0);
-    for (_, chr) in char_indices.take_while(|(idx, _)| *idx < end) {
+    for (_, chr) in char_indices.take_while(|(idx, _)| *idx < end.try_into().unwrap()) {
         if chr == '\n' {
             line += 1;
             column = 0;
@@ -137,12 +146,16 @@ pub struct LineColumnPosition {
 
 impl LineColumnPosition {
     pub fn into_scalar_position(self, on_slice: &str) -> Position {
-        Position(line_column_position_to_position(
-            self.line,
-            self.column,
-            &mut on_slice.char_indices(),
-            on_slice.len(),
-        ))
+        Position(
+            line_column_position_to_position(
+                self.line,
+                self.column,
+                &mut on_slice.char_indices(),
+                on_slice.len(),
+            )
+            .try_into()
+            .unwrap(),
+        )
     }
 }
 
@@ -176,8 +189,8 @@ impl LineColumnSpan {
             )
         };
         Span {
-            start,
-            end,
+            start: start.try_into().unwrap(),
+            end: end.try_into().unwrap(),
             source_id,
         }
     }
@@ -262,7 +275,7 @@ Another line";
     #[test]
     fn scalar_position_to_line_column() {
         let l_of_line_position = Position(52);
-        assert_eq!(&SOURCE[l_of_line_position.0..], "line");
+        assert_eq!(&SOURCE[l_of_line_position.0.try_into().unwrap()..], "line");
 
         assert_eq!(
             l_of_line_position.into_line_column_position(SOURCE),
