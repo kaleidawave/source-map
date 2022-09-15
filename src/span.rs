@@ -4,10 +4,20 @@ use super::SourceId;
 
 /// A start and end. Also contains trace of original source
 #[derive(PartialEq, Eq, Clone)]
+#[cfg(not(feature = "u32-span"))]
 #[cfg_attr(feature = "span-serialize", derive(serde::Serialize))]
 pub struct Span {
     pub start: usize,
     pub end: usize,
+    pub source_id: SourceId,
+}
+
+#[derive(PartialEq, Eq, Clone)]
+#[cfg(feature = "u32-span")]
+#[cfg_attr(feature = "span-serialize", derive(serde::Serialize))]
+pub struct Span {
+    pub start: u32,
+    pub end: u32,
     pub source_id: SourceId,
 }
 
@@ -121,8 +131,8 @@ fn line_column_position_to_position(
 /// Zero based
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct LineColumnPosition {
-    line: u32,
-    column: u32,
+    pub line: u32,
+    pub column: u32,
 }
 
 impl LineColumnPosition {
@@ -140,10 +150,10 @@ impl LineColumnPosition {
 /// Zero based
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct LineColumnSpan {
-    line_start: u32,
-    column_start: u32,
-    line_end: u32,
-    column_end: u32,
+    pub line_start: u32,
+    pub column_start: u32,
+    pub line_end: u32,
+    pub column_end: u32,
 }
 
 impl LineColumnSpan {
