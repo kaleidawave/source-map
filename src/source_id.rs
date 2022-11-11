@@ -8,14 +8,14 @@ use std::{
     },
 };
 
-use lazy_static::lazy_static;
-
-lazy_static! {
+// #[cfg(feature="global-sources-map")]
+lazy_static::lazy_static! {
     /// Maps source ids to paths and content
     static ref SOURCE_IDS_TO_FILES: RwLock<HashMap<SourceId, (PathBuf, String)>> =
-        RwLock::new(HashMap::new());
+    RwLock::new(HashMap::new());
 }
 
+// #[cfg(feature="global-sources-map")]
 static SOURCE_ID_COUNTER: AtomicU8 = AtomicU8::new(1);
 
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
@@ -28,14 +28,31 @@ impl fmt::Debug for SourceId {
     }
 }
 
+#[cfg(feature = "self-rust-tokenize")]
+pub const SPAN_TOKEN_IDENT: &str = "CURRENT_SOURCE_ID";
+
+#[cfg(feature = "self-rust-tokenize")]
+impl self_rust_tokenize::SelfRustTokenize for SourceId {
+    fn to_tokens(&self) -> proc_macro2::TokenStream {
+        // Not sure how call site works here, but oh well
+        proc_macro2::TokenTree::Ident(proc_macro2::Ident::new(
+            SPAN_TOKEN_IDENT,
+            proc_macro2::Span::call_site(),
+        ))
+        .into()
+    }
+}
+
 impl SourceId {
     /// Returns a [SourceId] handle that references a file and its content
     pub fn new(path: PathBuf, content: String) -> Self {
         let source_id = Self(SOURCE_ID_COUNTER.fetch_add(1, Ordering::SeqCst));
+
         SOURCE_IDS_TO_FILES
             .write()
             .unwrap()
             .insert(source_id, (path, content));
+
         source_id
     }
 
@@ -47,8 +64,29 @@ impl SourceId {
     }
 
     /// Note that this does clone the result
+    ///
+    /// use [SourceId::get_file_slice] for a section of the source
     pub fn get_file(&self) -> Option<(PathBuf, String)> {
         SOURCE_IDS_TO_FILES.read().unwrap().get(self).cloned()
+    }
+
+    /// Note that this does clone the result
+    pub fn get_file_slice<I: std::slice::SliceIndex<str>>(
+        &self,
+        slice: I,
+    ) -> Option<(PathBuf, <I::Output as ToOwned>::Owned)>
+    where
+        I::Output: Sized + ToOwned,
+    {
+        if let Some((path_buf, string)) = SOURCE_IDS_TO_FILES.read().unwrap().get(self) {
+            if let Some(slice) = string.get(slice) {
+                Some((path_buf.clone(), slice.to_owned()))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 
     /// Unwraps the count

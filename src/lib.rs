@@ -104,6 +104,11 @@ impl SourceMapBuilder {
         }));
     }
 
+    /// Encodes the results into a string and builds the JSON representation thingy
+    ///
+    /// TODO not 100% certain that this code is a the correct implementation
+    ///
+    /// TODO are the accounts for SourceId::null valid here...?
     pub fn build(self) -> String {
         // Splits are indexes of new lines in the source
         let mut source_line_splits = HashMap::<SourceId, Vec<_>>::new();
@@ -112,7 +117,13 @@ impl SourceMapBuilder {
         let mut source_contents = Vec::<String>::new();
 
         for source_id in self.used_sources {
-            let (source_path, source_content) = source_id.get_file().unwrap();
+            if source_id.is_null() {
+                continue;
+            }
+
+            let (source_path, source_content) = source_id
+                .get_file()
+                .expect("Could not find contents for source id");
 
             let line_splits = source_content
                 .char_indices()
@@ -145,7 +156,11 @@ impl SourceMapBuilder {
                         from_source,
                     } = mapping;
 
-                    if !last_was_break.unwrap_or(true) {
+                    if from_source.is_null() {
+                        continue;
+                    }
+
+                    if let Some(false) = last_was_break {
                         source_map_mappings_field.push(',');
                     }
 
@@ -227,25 +242,29 @@ impl SourceMapBuilder {
             }
         }
 
-        format!(
-            r#"{{"version":3,"sourceRoot":"","sources":[{}],"sourcesContent":[{}],"names":[],"mappings":"{}"}}"#,
-            source_paths
-                .into_iter()
-                .map(|path| format!("\"{}\"", path.display()).replace('\\', "/"))
-                .reduce(quote_and_comma_delimiter)
-                .unwrap_or_default(),
-            source_contents
-                .into_iter()
-                .map(|content| format!(
+        let sources = source_paths
+            .into_iter()
+            .map(|path| format!("\"{}\"", path.display()).replace('\\', "/"))
+            .reduce(quote_and_comma_delimiter)
+            .unwrap_or_default();
+
+        let sources_content: String = source_contents
+            .into_iter()
+            .map(|content| {
+                format!(
                     "\"{}\"",
                     content
                         .replace('\n', "\\n")
                         .replace('\r', "\\r")
                         .replace('"', "\\\"")
-                ))
-                .reduce(quote_and_comma_delimiter)
-                .unwrap_or_default(),
-            source_map_mappings_field
+                )
+            })
+            .reduce(quote_and_comma_delimiter)
+            .unwrap_or_default();
+
+        format!(
+            r#"{{"version":3,"sourceRoot":"","sources":[{}],"sourcesContent":[{}],"names":[],"mappings":"{}"}}"#,
+            sources, sources_content, source_map_mappings_field
         )
     }
 }
