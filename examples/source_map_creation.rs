@@ -3,7 +3,7 @@
 fn main() {
     use source_map::{SourceId, Span, StringWithSourceMap, ToString};
     use split_indices::split_indices_from_str;
-    use std::{convert::TryInto, fs};
+    use std::{convert::TryInto, env::args, fs};
 
     /// A simple string split, returns chunk plus byte indexes of chunk
     mod split_indices {
@@ -78,9 +78,17 @@ fn main() {
     }
 
     let mut source_map = StringWithSourceMap::new();
-    remove_whitespace(&fs::read_to_string("file.txt").unwrap(), &mut source_map);
-    let output = source_map.build_with_inline_source_map();
-    fs::write("file-out.txt", output).unwrap();
+
+    let mut arguments = args().skip(1);
+    let (input, output) = (
+        arguments.next().expect("Expected input path argument"),
+        arguments.next().expect("Expected output path argument"),
+    );
+    let file_as_string = fs::read_to_string(input).expect("Invalid path");
+
+    remove_whitespace(&file_as_string, &mut source_map);
+
+    fs::write(output, source_map.build_with_inline_source_map()).expect("Write failed");
 }
 
 #[cfg(not(feature = "inline-source-map"))]

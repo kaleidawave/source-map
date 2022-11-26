@@ -5,16 +5,15 @@ use super::SourceId;
 /// A start and end. Also contains trace of original source
 #[derive(PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "span-serialize", derive(serde::Serialize))]
+#[cfg_attr(
+    feature = "self-rust-tokenize",
+    derive(self_rust_tokenize::SelfRustTokenize)
+)]
 pub struct Span {
-    pub start: ByteMarker,
-    pub end: ByteMarker,
+    pub start: u32,
+    pub end: u32,
     pub source_id: SourceId,
 }
-
-#[cfg(not(feature = "u32-span"))]
-pub type ByteMarker = usize;
-#[cfg(feature = "u32-span")]
-pub type ByteMarker = u32;
 
 impl fmt::Debug for Span {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -62,8 +61,8 @@ impl Span {
     }
 }
 
-impl From<Span> for Range<ByteMarker> {
-    fn from(span: Span) -> Range<ByteMarker> {
+impl From<Span> for Range<u32> {
+    fn from(span: Span) -> Range<u32> {
         Range {
             start: span.start,
             end: span.end,
@@ -71,7 +70,6 @@ impl From<Span> for Range<ByteMarker> {
     }
 }
 
-#[cfg(feature = "u32-span")]
 impl From<Span> for Range<usize> {
     fn from(span: Span) -> Range<usize> {
         Range {
@@ -82,7 +80,7 @@ impl From<Span> for Range<usize> {
 }
 
 #[derive(PartialEq, Eq, Clone)]
-pub struct Position(pub ByteMarker);
+pub struct Position(pub u32);
 
 impl fmt::Debug for Position {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -99,10 +97,7 @@ impl Position {
 }
 
 /// Returns `(line, column)`
-fn get_line_column_from_string_and_idx(
-    end: ByteMarker,
-    char_indices: &mut CharIndices,
-) -> (u32, u32) {
+fn get_line_column_from_string_and_idx(end: u32, char_indices: &mut CharIndices) -> (u32, u32) {
     let (mut line, mut column) = (0, 0);
     for (_, chr) in char_indices.take_while(|(idx, _)| *idx < end.try_into().unwrap()) {
         if chr == '\n' {
