@@ -14,11 +14,10 @@ lazy_static = "1.4.0"
 lsp-types = { version = "0.91.1", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 base64 = { version = "0.13.0", optional = true }
-self-rust-tokenize = { version = "0.2.0", optional = true }
-proc-macro2 = { version = "1", optional = true }
+self-rust-tokenize = { version = "0.3.2", optional = true }
 
 [features]
-self-rust-tokenize = ["dep:self-rust-tokenize", "dep:proc-macro2"]
+self-rust-tokenize = ["dep:self-rust-tokenize"]
 lsp-types-morphisms = ["dep:lsp-types"]
 span-serialize = ["dep:serde"]
 inline-source-map = ["dep:base64"]

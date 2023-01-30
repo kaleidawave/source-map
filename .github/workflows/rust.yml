@@ -2,9 +2,9 @@ name: Rust
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
@@ -14,35 +14,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }} 
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Check source is valid
         run: cargo check --workspace
-
-  tests:
-    needs: validity
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    - name: Run tests
-      run: cargo test --verbose --all-features
 
   formating:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - name: Check formatting with rustfmt
-        run: cargo fmt --all -- --check
+        run: cargo fmt --all --check
+
+  tests:
+    needs: validity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run tests
+        run: cargo test --workspace --verbose --all-features
 
   clippy:
+    needs: validity
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - name: Lint code
         run: cargo clippy
-        

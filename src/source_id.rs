@@ -33,13 +33,15 @@ pub const SPAN_TOKEN_IDENT: &str = "CURRENT_SOURCE_ID";
 
 #[cfg(feature = "self-rust-tokenize")]
 impl self_rust_tokenize::SelfRustTokenize for SourceId {
-    fn to_tokens(&self) -> proc_macro2::TokenStream {
-        // Not sure how call site works here, but oh well
-        proc_macro2::TokenTree::Ident(proc_macro2::Ident::new(
+    fn append_to_token_stream(
+        &self,
+        token_stream: &mut self_rust_tokenize::proc_macro2::TokenStream,
+    ) {
+        let current_source_id_reference = self_rust_tokenize::proc_macro2::Ident::new(
             SPAN_TOKEN_IDENT,
-            proc_macro2::Span::call_site(),
-        ))
-        .into()
+            self_rust_tokenize::proc_macro2::Span::call_site(),
+        );
+        self_rust_tokenize::TokenStreamExt::append(token_stream, current_source_id_reference);
     }
 }
 
