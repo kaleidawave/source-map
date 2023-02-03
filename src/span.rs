@@ -79,6 +79,7 @@ impl From<Span> for Range<usize> {
     }
 }
 
+/// A scalar/singular byte wise position
 #[derive(PartialEq, Eq, Clone)]
 pub struct Position(pub u32);
 
@@ -131,7 +132,7 @@ fn line_column_position_to_position(
         + column as usize
 }
 
-/// TODO should these include [SourceId]?
+// TODO should these include [SourceId]?
 /// Zero based
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct LineColumnPosition {
@@ -154,7 +155,7 @@ impl LineColumnPosition {
     }
 }
 
-/// TODO should these include [SourceId]?
+// TODO should these include [SourceId]?
 /// Zero based
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct LineColumnSpan {

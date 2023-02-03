@@ -127,7 +127,7 @@ impl SourceMapBuilder {
 
             let line_splits = source_content
                 .char_indices()
-                .filter_map(|(idx, chr)| (chr == '\n').then(|| idx))
+                .filter_map(|(idx, chr)| (chr == '\n').then_some(idx))
                 .collect::<Vec<_>>();
 
             source_line_splits.insert(source_id, line_splits);

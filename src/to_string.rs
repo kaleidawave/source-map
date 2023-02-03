@@ -1,6 +1,6 @@
 use crate::{SourceMapBuilder, Span};
 
-/// A trait for defining behavior of adding content to a buffer
+/// A trait for defining behavior of adding content to a buffer. As well as register markers for source maps
 pub trait ToString {
     fn push(&mut self, chr: char);
 
@@ -35,6 +35,7 @@ impl ToString for String {
     fn add_mapping(&mut self, _source_span: &Span) {}
 }
 
+/// Building a source along with its source map
 #[derive(Default)]
 pub struct StringWithSourceMap(String, SourceMapBuilder);
 
@@ -44,12 +45,12 @@ impl StringWithSourceMap {
     }
 
     /// Returns source and the source map
-    /// TODO better return type
     pub fn build(self) -> (String, String) {
         (self.0, self.1.build())
     }
 
     #[cfg(feature = "inline-source-map")]
+    /// Build the output and append the source map in base 64
     pub fn build_with_inline_source_map(self) -> String {
         let Self(mut source, source_map) = self;
         let built_source_map = source_map.build();
@@ -89,7 +90,7 @@ impl ToString for StringWithSourceMap {
     }
 }
 
-/// Used for getting **byte count** of the result if serialized
+/// Used for getting **byte count** of the result when built into string without building the string
 #[derive(Default)]
 pub struct Counter(usize);
 

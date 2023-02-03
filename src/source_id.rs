@@ -18,6 +18,7 @@ lazy_static::lazy_static! {
 // #[cfg(feature="global-sources-map")]
 static SOURCE_ID_COUNTER: AtomicU8 = AtomicU8::new(1);
 
+/// A identifier to some source
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature = "span-serialize", derive(serde::Serialize))]
 pub struct SourceId(u8);
@@ -81,11 +82,9 @@ impl SourceId {
         I::Output: Sized + ToOwned,
     {
         if let Some((path_buf, string)) = SOURCE_IDS_TO_FILES.read().unwrap().get(self) {
-            if let Some(slice) = string.get(slice) {
-                Some((path_buf.clone(), slice.to_owned()))
-            } else {
-                None
-            }
+            string
+                .get(slice)
+                .map(|slice| (path_buf.clone(), slice.to_owned()))
         } else {
             None
         }
