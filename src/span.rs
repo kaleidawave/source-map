@@ -59,6 +59,18 @@ impl Span {
             column_end: column_end + column_start + 1,
         }
     }
+
+    /// TODO explain use cases
+    pub const NULL_SPAN: Span = Span {
+        start: 0,
+        end: 0,
+        source_id: SourceId::NULL,
+    };
+
+    /// TODO explain use cases
+    pub fn is_null(&self) -> bool {
+        self.source_id == SourceId::NULL
+    }
 }
 
 impl From<Span> for Range<u32> {
@@ -132,7 +144,6 @@ fn line_column_position_to_position(
         + column as usize
 }
 
-// TODO should these include [SourceId]?
 /// Zero based
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct LineColumnPosition {
@@ -155,7 +166,6 @@ impl LineColumnPosition {
     }
 }
 
-// TODO should these include [SourceId]?
 /// Zero based
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct LineColumnSpan {

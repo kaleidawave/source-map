@@ -11,7 +11,7 @@ repository = "https://github.com/kaleidawave/source-map"
 
 [dependencies]
 lazy_static = "1.4.0"
-lsp-types = { version = "0.91.1", optional = true }
+lsp-types = { version = "0", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 base64 = { version = "0.13.0", optional = true }
 self-rust-tokenize = { version = "0.3.3", optional = true }

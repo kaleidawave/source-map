@@ -242,6 +242,12 @@ impl SourceMapBuilder {
             }
         }
 
+        fn quote_and_comma_delimiter(mut a: String, b: impl AsRef<str>) -> String {
+            a.push_str(", ");
+            a.push_str(b.as_ref());
+            a
+        }
+
         let sources = source_paths
             .into_iter()
             .map(|path| format!("\"{}\"", path.display()).replace('\\', "/"))
@@ -267,12 +273,6 @@ impl SourceMapBuilder {
             sources, sources_content, source_map_mappings_field
         )
     }
-}
-
-fn quote_and_comma_delimiter(mut a: String, b: impl AsRef<str>) -> String {
-    a.push_str(", ");
-    a.push_str(b.as_ref());
-    a
 }
 
 #[cfg(test)]
