@@ -45,7 +45,10 @@ pub trait FileSystem: Sized {
     fn get_file_whole_span(&self, source_id: SourceId) -> Span {
         self.get_file(source_id, |_, c| Span {
             start: 0,
-            end: c.len().try_into().expect("File too large to convert to span"),
+            end: c
+                .len()
+                .try_into()
+                .expect("File too large to convert to span"),
             source_id,
         })
     }
