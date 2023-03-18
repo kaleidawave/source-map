@@ -1,7 +1,7 @@
 /// Given a file, removes whitespace and returns the result along with a source map
 #[cfg(feature = "inline-source-map")]
 fn main() {
-    use source_map::{SourceId, Span, StringWithSourceMap, ToString};
+    use source_map::{FileSystem, GlobalStore, SourceId, Span, StringWithSourceMap, ToString};
     use split_indices::split_indices_from_str;
     use std::{convert::TryInto, env::args, fs};
 
@@ -62,8 +62,8 @@ fn main() {
         }
     }
 
-    fn remove_whitespace(string: &str, output: &mut impl ToString) {
-        let source_id = SourceId::new("file.txt".into(), string.to_owned());
+    fn remove_whitespace(fs: &mut impl FileSystem, string: &str, output: &mut impl ToString) {
+        let source_id = SourceId::new(fs, "file.txt".into(), string.to_owned());
 
         for (range, chunk) in split_indices_from_str(string, char::is_whitespace) {
             if !chunk.is_empty() {
@@ -86,9 +86,11 @@ fn main() {
     );
     let file_as_string = fs::read_to_string(input).expect("Invalid path");
 
-    remove_whitespace(&file_as_string, &mut source_map);
+    let mut fs = GlobalStore;
 
-    fs::write(output, source_map.build_with_inline_source_map()).expect("Write failed");
+    remove_whitespace(&mut fs, &file_as_string, &mut source_map);
+
+    fs::write(output, source_map.build_with_inline_source_map(&fs)).expect("Write failed");
 }
 
 #[cfg(not(feature = "inline-source-map"))]

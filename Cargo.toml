@@ -10,15 +10,17 @@ categories = ["web-programming"]
 repository = "https://github.com/kaleidawave/source-map"
 
 [dependencies]
-lazy_static = "1.4.0"
 lsp-types = { version = "0", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 base64 = { version = "0.13.0", optional = true }
-self-rust-tokenize = { version = "0.3.3", optional = true }
+codespan-reporting = { version = "0.11", optional = true }
+self-rust-tokenize = { version = "0.3", optional = true }
 
 [features]
+default = ["global-source-filesystem"]
 self-rust-tokenize = ["dep:self-rust-tokenize"]
 lsp-types-morphisms = ["dep:lsp-types"]
 span-serialize = ["dep:serde"]
 inline-source-map = ["dep:base64"]
-# global-sources-map = ["dep:lazy_static"]
+codespan-reporting = ["dep:codespan-reporting"]
+global-source-filesystem = []

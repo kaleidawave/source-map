@@ -1,5 +1,6 @@
 #![allow(clippy::useless_conversion)]
 
+mod filesystem;
 mod source_id;
 mod span;
 mod to_string;
@@ -7,9 +8,9 @@ mod to_string;
 use std::{
     collections::{HashMap, HashSet},
     convert::TryInto,
-    path::PathBuf,
 };
 
+pub use filesystem::*;
 pub use source_id::SourceId;
 pub use span::{LineColumnPosition, LineColumnSpan, Position, Span};
 pub use to_string::{Counter, StringWithSourceMap, ToString};
@@ -109,35 +110,24 @@ impl SourceMapBuilder {
     /// TODO not 100% certain that this code is a the correct implementation
     ///
     /// TODO are the accounts for SourceId::null valid here...?
-    pub fn build(self) -> String {
+    pub fn build(self, fs: &impl FileSystem) -> SourceMap {
         // Splits are indexes of new lines in the source
         let mut source_line_splits = HashMap::<SourceId, Vec<_>>::new();
-        let mut source_ids = Vec::<SourceId>::new();
-        let mut source_paths = Vec::<PathBuf>::new();
-        let mut source_contents = Vec::<String>::new();
+        let mut sources = Vec::<SourceId>::new();
 
-        for source_id in self.used_sources {
-            if source_id.is_null() {
-                continue;
-            }
-
-            let (source_path, source_content) = source_id
-                .get_file()
-                .expect("Could not find contents for source id");
-
-            let line_splits = source_content
-                .char_indices()
-                .filter_map(|(idx, chr)| (chr == '\n').then_some(idx))
-                .collect::<Vec<_>>();
+        for source_id in self.used_sources.into_iter().filter(|id| !id.is_null()) {
+            let line_splits = fs.get_file(source_id, |_, source| {
+                source
+                    .char_indices()
+                    .filter_map(|(idx, chr)| (chr == '\n').then_some(idx))
+                    .collect::<Vec<_>>()
+            });
 
             source_line_splits.insert(source_id, line_splits);
-
-            source_ids.push(source_id);
-            source_paths.push(source_path);
-            source_contents.push(source_content);
+            sources.push(source_id);
         }
 
-        let mut source_map_mappings_field = String::new();
+        let mut mappings = String::new();
 
         let mut last_was_break = None::<bool>;
         let mut last_mapped_source_line = 0;
@@ -161,24 +151,24 @@ impl SourceMapBuilder {
                     }
 
                     if let Some(false) = last_was_break {
-                        source_map_mappings_field.push(',');
+                        mappings.push(',');
                     }
 
                     let output_column =
                         on_output_column as isize - last_mapped_output_column as isize;
-                    vlq_encode_integer_to_buffer(&mut source_map_mappings_field, output_column);
+
+                    vlq_encode_integer_to_buffer(&mut mappings, output_column);
                     last_mapped_output_column = on_output_column;
 
                     // Find index
-                    let idx = source_ids
-                        .iter()
-                        .position(|sid| *sid == from_source)
-                        .unwrap();
+                    let idx = sources.iter().position(|sid| *sid == from_source).unwrap();
+
                     // Encode index of source
-                    vlq_encode_integer_to_buffer(&mut source_map_mappings_field, idx as isize);
+                    vlq_encode_integer_to_buffer(&mut mappings, idx as isize);
 
                     let line_splits_for_this_file = source_line_splits.get(&from_source).unwrap();
 
+                    // TODO explain
                     let (source_line, source_column) = match line_splits_for_this_file.as_slice() {
                         [] => (0, source_byte_start),
                         [split] => {
@@ -194,10 +184,8 @@ impl SourceMapBuilder {
                             } else if source_byte_start > *splits.last().unwrap() {
                                 (splits.len(), source_byte_start - splits.last().unwrap())
                             } else {
-                                splits
-                                    .windows(2)
-                                    .enumerate()
-                                    .find_map(|(line, window)| {
+                                let splits =
+                                    splits.windows(2).enumerate().find_map(|(line, window)| {
                                         if let [floor, ceil] = window {
                                             if *floor < source_byte_start
                                                 && source_byte_start <= *ceil
@@ -209,24 +197,26 @@ impl SourceMapBuilder {
                                         } else {
                                             unreachable!()
                                         }
-                                    })
-                                    // TODO temp:
-                                    .unwrap_or_else(|| dbg!(0, source_byte_start))
+                                    });
+
+                                if let Some(splits) = splits {
+                                    splits
+                                } else {
+                                    eprintln!("Didn't find ...");
+                                    (0, source_byte_start)
+                                }
                             }
                         }
                     };
 
-                    vlq_encode_integer_to_buffer(
-                        &mut source_map_mappings_field,
-                        source_line as isize - last_mapped_source_line as isize,
-                    );
+                    let source_line_diff = source_line as isize - last_mapped_source_line as isize;
+                    vlq_encode_integer_to_buffer(&mut mappings, source_line_diff);
 
                     last_mapped_source_line = source_line;
 
-                    vlq_encode_integer_to_buffer(
-                        &mut source_map_mappings_field,
-                        source_column as isize - last_mapped_source_column as isize,
-                    );
+                    let source_column_diff =
+                        source_column as isize - last_mapped_source_column as isize;
+                    vlq_encode_integer_to_buffer(&mut mappings, source_column_diff);
 
                     last_mapped_source_column = source_column;
 
@@ -235,42 +225,61 @@ impl SourceMapBuilder {
                     last_was_break = Some(false);
                 }
                 MappingOrBreak::Break => {
-                    source_map_mappings_field.push(';');
+                    mappings.push(';');
                     last_was_break = Some(true);
                     last_mapped_output_column = 0;
                 }
             }
         }
 
-        fn quote_and_comma_delimiter(mut a: String, b: impl AsRef<str>) -> String {
-            a.push_str(", ");
-            a.push_str(b.as_ref());
-            a
+        SourceMap { mappings, sources }
+    }
+}
+
+#[derive(Clone)]
+pub struct SourceMap {
+    pub mappings: String,
+    pub sources: Vec<SourceId>,
+}
+
+impl SourceMap {
+    pub fn to_json(self, filesystem: &impl FileSystem) -> String {
+        use std::fmt::Write;
+
+        let Self {
+            mappings,
+            sources: sources_used,
+        } = self;
+
+        let (mut sources, mut sources_content) = (String::new(), String::new());
+        for (idx, (path, content)) in sources_used
+            .into_iter()
+            .map(|source_id| filesystem.get_file_path_and_content(source_id))
+            .enumerate()
+        {
+            if idx != 0 {
+                sources.push(',');
+                sources_content.push(',');
+            }
+            write!(
+                sources,
+                "\"{}\"",
+                path.display().to_string().replace('\\', "/")
+            )
+            .unwrap();
+            write!(
+                sources_content,
+                "\"{}\"",
+                content
+                    .replace('\n', "\\n")
+                    .replace('\r', "\\r")
+                    .replace('"', "\\\"")
+            )
+            .unwrap();
         }
 
-        let sources = source_paths
-            .into_iter()
-            .map(|path| format!("\"{}\"", path.display()).replace('\\', "/"))
-            .reduce(quote_and_comma_delimiter)
-            .unwrap_or_default();
-
-        let sources_content: String = source_contents
-            .into_iter()
-            .map(|content| {
-                format!(
-                    "\"{}\"",
-                    content
-                        .replace('\n', "\\n")
-                        .replace('\r', "\\r")
-                        .replace('"', "\\\"")
-                )
-            })
-            .reduce(quote_and_comma_delimiter)
-            .unwrap_or_default();
-
         format!(
-            r#"{{"version":3,"sourceRoot":"","sources":[{}],"sourcesContent":[{}],"names":[],"mappings":"{}"}}"#,
-            sources, sources_content, source_map_mappings_field
+            r#"{{"version":3,"sourceRoot":"","sources":[{sources}],"sourcesContent":[{sources_content}],"names":[],"mappings":"{mappings}"}}"#,
         )
     }
 }

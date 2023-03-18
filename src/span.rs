@@ -1,5 +1,7 @@
 use std::{convert::TryInto, fmt, ops::Range, str::CharIndices};
 
+use crate::FileSystem;
+
 use super::SourceId;
 
 /// A start and end. Also contains trace of original source
@@ -17,15 +19,13 @@ pub struct Span {
 
 impl fmt::Debug for Span {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if !self.source_id.is_null() {
+        if self.source_id.is_null() {
+            f.write_fmt(format_args!("{}..{}", self.start, self.end,))
+        } else {
             f.write_fmt(format_args!(
                 "{}..{}#{}",
-                self.start,
-                self.end,
-                self.source_id.get_count()
+                self.start, self.end, self.source_id.0
             ))
-        } else {
-            f.write_fmt(format_args!("{}..{}", self.start, self.end,))
         }
     }
 }
@@ -45,19 +45,22 @@ impl Span {
         }
     }
 
-    pub fn into_line_column_span(self, on_slice: &str) -> LineColumnSpan {
-        let mut char_indices = on_slice.char_indices();
-        let Span { start, end, .. } = self;
-        let (line_start, column_start) =
-            get_line_column_from_string_and_idx(start, &mut char_indices);
-        let (line_end, column_end) = get_line_column_from_string_and_idx(end, &mut char_indices);
+    pub fn into_line_column_span(self, fs: &impl FileSystem) -> LineColumnSpan {
+        fs.get_file(self.source_id, |_, content| {
+            let mut char_indices = content.char_indices();
+            let Span { start, end, .. } = self;
+            let (line_start, column_start) =
+                get_line_column_from_string_and_idx(start, &mut char_indices);
+            let (line_end, column_end) =
+                get_line_column_from_string_and_idx(end, &mut char_indices);
 
-        LineColumnSpan {
-            line_start,
-            column_start,
-            line_end: line_end + line_start,
-            column_end: column_end + column_start + 1,
-        }
+            LineColumnSpan {
+                line_start,
+                column_start,
+                line_end: line_end + line_start,
+                column_end: column_end + column_start + 1,
+            }
+        })
     }
 
     /// TODO explain use cases
@@ -91,7 +94,7 @@ impl From<Span> for Range<usize> {
     }
 }
 
-/// A scalar/singular byte wise position
+/// A scalar/singular byte wise position. **Zero based**
 #[derive(PartialEq, Eq, Clone)]
 pub struct Position(pub u32);
 
@@ -105,11 +108,14 @@ impl Position {
     pub fn into_line_column_position(self, on_slice: &str) -> LineColumnPosition {
         let (line, column) =
             get_line_column_from_string_and_idx(self.0, &mut on_slice.char_indices());
-        LineColumnPosition { line, column }
+        LineColumnPosition {
+            line: line + 1,
+            column: column + 1,
+        }
     }
 }
 
-/// Returns `(line, column)`
+/// Returns `(line, column)`. Return is zero based
 fn get_line_column_from_string_and_idx(end: u32, char_indices: &mut CharIndices) -> (u32, u32) {
     let (mut line, mut column) = (0, 0);
     for (_, chr) in char_indices.take_while(|(idx, _)| *idx < end.try_into().unwrap()) {
@@ -124,7 +130,10 @@ fn get_line_column_from_string_and_idx(end: u32, char_indices: &mut CharIndices)
 }
 
 /// Converts line and column to index in string
-/// Isomorphism of [get_line_column_from_string_and_idx]
+///
+/// Line and column are zero based
+///
+/// Inverse of [get_line_column_from_string_and_idx]
 fn line_column_position_to_position(
     mut line: u32,
     column: u32,
@@ -144,7 +153,7 @@ fn line_column_position_to_position(
         + column as usize
 }
 
-/// Zero based
+/// **One based**
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct LineColumnPosition {
     pub line: u32,
@@ -155,8 +164,8 @@ impl LineColumnPosition {
     pub fn into_scalar_position(self, on_slice: &str) -> Position {
         Position(
             line_column_position_to_position(
-                self.line,
-                self.column,
+                self.line - 1,
+                self.column - 1,
                 &mut on_slice.char_indices(),
                 on_slice.len(),
             )
@@ -166,7 +175,7 @@ impl LineColumnPosition {
     }
 }
 
-/// Zero based
+/// **One based**
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct LineColumnSpan {
     pub line_start: u32,
@@ -179,17 +188,17 @@ impl LineColumnSpan {
     pub fn into_scalar_span(self, on_slice: &str, source_id: SourceId) -> Span {
         let mut char_indices = on_slice.char_indices();
         let start = line_column_position_to_position(
-            self.line_start,
-            self.column_start,
+            self.line_start - 1,
+            self.column_start - 1,
             &mut char_indices,
             on_slice.len(),
         );
         let end = if self.line_start == self.line_end {
-            start + self.column_end as usize - self.column_start as usize
+            start + self.column_end as usize - self.column_start as usize - 1
         } else {
             line_column_position_to_position(
                 self.line_end - self.line_start,
-                self.column_end,
+                self.column_end - 1,
                 &mut char_indices,
                 on_slice.len(),
             )
@@ -206,8 +215,8 @@ impl LineColumnSpan {
 impl Into<lsp_types::Position> for LineColumnPosition {
     fn into(self) -> lsp_types::Position {
         lsp_types::Position {
-            line: self.line,
-            character: self.column,
+            line: self.line - 1,
+            character: self.column - 1,
         }
     }
 }
@@ -217,12 +226,12 @@ impl Into<lsp_types::Range> for LineColumnSpan {
     fn into(self) -> lsp_types::Range {
         lsp_types::Range {
             start: lsp_types::Position {
-                line: self.line_start,
-                character: self.column_start,
+                line: self.line_start - 1,
+                character: self.column_start - 1,
             },
             end: lsp_types::Position {
-                line: self.line_end,
-                character: self.column_end,
+                line: self.line_end - 1,
+                character: self.column_end - 1,
             },
         }
     }
@@ -232,8 +241,8 @@ impl Into<lsp_types::Range> for LineColumnSpan {
 impl From<lsp_types::Position> for LineColumnPosition {
     fn from(lsp_position: lsp_types::Position) -> Self {
         LineColumnPosition {
-            column: lsp_position.character,
-            line: lsp_position.line,
+            column: lsp_position.character + 1,
+            line: lsp_position.line + 1,
         }
     }
 }
@@ -242,16 +251,18 @@ impl From<lsp_types::Position> for LineColumnPosition {
 impl From<lsp_types::Range> for LineColumnSpan {
     fn from(lsp_range: lsp_types::Range) -> Self {
         LineColumnSpan {
-            line_start: lsp_range.start.line,
-            column_start: lsp_range.start.character,
-            line_end: lsp_range.end.line,
-            column_end: lsp_range.end.character,
+            line_start: lsp_range.start.line + 1,
+            column_start: lsp_range.start.character + 1,
+            line_end: lsp_range.end.line + 1,
+            column_end: lsp_range.end.character + 1,
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::MapFileStore;
+
     use super::*;
 
     const SOURCE: &str = "Hello World
@@ -260,15 +271,18 @@ Another line";
 
     #[test]
     fn scalar_span_to_line_column() {
+        let mut fs = MapFileStore::default();
+        let source_id = fs.new_source_id("".into(), SOURCE.into());
+
         let paragraph_span = Span {
             start: 19,
             end: 28,
-            source_id: SourceId::NULL,
+            source_id,
         };
-        assert_eq!(&SOURCE[Range::from(paragraph_span.clone())], "paragraph");
 
+        assert_eq!(&SOURCE[Range::from(paragraph_span.clone())], "paragraph");
         assert_eq!(
-            paragraph_span.into_line_column_span(SOURCE),
+            paragraph_span.into_line_column_span(&fs),
             LineColumnSpan {
                 line_start: 1,
                 column_start: 7,
@@ -285,13 +299,13 @@ Another line";
 
         assert_eq!(
             l_of_line_position.into_line_column_position(SOURCE),
-            LineColumnPosition { line: 2, column: 8 }
+            LineColumnPosition { line: 3, column: 9 }
         );
     }
 
     #[test]
     fn line_column_position_to_position() {
-        let start_of_another_position = LineColumnPosition { line: 2, column: 0 };
+        let start_of_another_position = LineColumnPosition { line: 3, column: 1 };
         assert_eq!(
             start_of_another_position.into_scalar_position(SOURCE),
             Position(44)
@@ -301,11 +315,12 @@ Another line";
     #[test]
     fn line_column_span_to_span() {
         let line_another_span = LineColumnSpan {
-            line_start: 1,
-            column_start: 26,
-            line_end: 2,
-            column_end: 12,
+            line_start: 2,
+            column_start: 27,
+            line_end: 3,
+            column_end: 13,
         };
+
         let line_another_span = line_another_span.into_scalar_span(SOURCE, SourceId::NULL);
         assert_eq!(
             &SOURCE[Range::from(line_another_span)],

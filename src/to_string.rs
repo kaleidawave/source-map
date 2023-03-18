@@ -1,4 +1,4 @@
-use crate::{SourceMapBuilder, Span};
+use crate::{FileSystem, SourceMap, SourceMapBuilder, Span};
 
 /// A trait for defining behavior of adding content to a buffer. As well as register markers for source maps
 pub trait ToString {
@@ -45,17 +45,18 @@ impl StringWithSourceMap {
     }
 
     /// Returns source and the source map
-    pub fn build(self) -> (String, String) {
-        (self.0, self.1.build())
+    pub fn build(self, filesystem: &impl FileSystem) -> (String, SourceMap) {
+        (self.0, self.1.build(filesystem))
     }
 
     #[cfg(feature = "inline-source-map")]
     /// Build the output and append the source map in base 64
-    pub fn build_with_inline_source_map(self) -> String {
+    pub fn build_with_inline_source_map(self, filesystem: &impl FileSystem) -> String {
         let Self(mut source, source_map) = self;
-        let built_source_map = source_map.build();
+        let built_source_map = source_map.build(filesystem);
+        // Inline URL:
         source.push_str("\n//# sourceMappingURL=data:application/json;base64,");
-        source.push_str(&base64::encode(built_source_map));
+        source.push_str(&base64::encode(built_source_map.to_json(filesystem)));
         source
     }
 }
