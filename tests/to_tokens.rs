@@ -12,6 +12,6 @@ fn to_tokens() {
 
     assert_eq!(
         span.to_tokens().to_string(),
-        "Span { start : 10u32 , end : 20u32 , source_id : CURRENT_SOURCE_ID , }"
+        "Span { start : 10u32 , end : 20u32 , source : CURRENT_SOURCE_ID , }"
     );
 }
