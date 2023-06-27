@@ -6,6 +6,7 @@ pub trait ToString {
 
     fn push_new_line(&mut self);
 
+    /// Use [ToString::push_str_contains_new_line] if `string` could contain new lines
     fn push_str(&mut self, string: &str);
 
     /// Used to push strings that may contain new lines
@@ -15,6 +16,7 @@ pub trait ToString {
     fn add_mapping(&mut self, source_span: &Span);
 }
 
+// TODO clarify calls
 impl ToString for String {
     fn push(&mut self, chr: char) {
         self.push(chr);
@@ -61,6 +63,7 @@ impl StringWithSourceMap {
     }
 }
 
+// TODO use ToString for self.0
 impl ToString for StringWithSourceMap {
     fn push(&mut self, chr: char) {
         self.1.add_to_column(chr.len_utf16());

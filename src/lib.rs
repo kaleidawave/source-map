@@ -1,6 +1,8 @@
 #![allow(clippy::useless_conversion)]
 
+pub mod encodings;
 mod filesystem;
+mod lines_columns_indexes;
 mod source_id;
 mod span;
 mod to_string;
@@ -11,6 +13,7 @@ use std::{
 };
 
 pub use filesystem::*;
+pub use lines_columns_indexes::LineStarts;
 pub use source_id::SourceId;
 pub use span::{LineColumnPosition, LineColumnSpan, Position, Span};
 pub use to_string::{Counter, StringWithSourceMap, ToString};
@@ -91,7 +94,7 @@ impl SourceMapBuilder {
             start: source_byte_start,
             // TODO should it read this
             end: _source_byte_end,
-            source_id: from_source,
+            source: from_source,
         } = source_position.clone();
 
         self.used_sources.insert(from_source);
@@ -116,12 +119,7 @@ impl SourceMapBuilder {
         let mut sources = Vec::<SourceId>::new();
 
         for source_id in self.used_sources.into_iter().filter(|id| !id.is_null()) {
-            let line_splits = fs.get_file(source_id, |_, source| {
-                source
-                    .char_indices()
-                    .filter_map(|(idx, chr)| (chr == '\n').then_some(idx))
-                    .collect::<Vec<_>>()
-            });
+            let line_splits = fs.get_source(source_id, |source| source.line_starts.0.clone());
 
             source_line_splits.insert(source_id, line_splits);
             sources.push(source_id);
@@ -161,6 +159,7 @@ impl SourceMapBuilder {
                     last_mapped_output_column = on_output_column;
 
                     // Find index
+                    // TODO faster
                     let idx = sources.iter().position(|sid| *sid == from_source).unwrap();
 
                     // Encode index of source

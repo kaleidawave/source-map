@@ -70,7 +70,7 @@ fn main() {
                 output.add_mapping(&Span {
                     start: range.start.try_into().unwrap(),
                     end: range.end.try_into().unwrap(),
-                    source_id,
+                    source: source_id,
                 });
                 output.push_str(chunk);
             }

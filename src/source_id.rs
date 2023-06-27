@@ -1,8 +1,7 @@
+use crate::FileSystem;
 use std::{fmt, path::PathBuf};
 
-use crate::FileSystem;
-
-/// A identifier to some source
+/// A identifier for a [crate::Source]
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature = "span-serialize", derive(serde::Serialize))]
 pub struct SourceId(pub(crate) u16);
@@ -10,6 +9,20 @@ pub struct SourceId(pub(crate) u16);
 impl fmt::Debug for SourceId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_fmt(format_args!("SourceId({})", self.0))
+    }
+}
+
+impl SourceId {
+    /// Returns a [SourceId] handle that references a file and its content
+    pub fn new(filesystem: &mut impl FileSystem, path: PathBuf, content: String) -> Self {
+        filesystem.new_source_id(path, content)
+    }
+
+    /// For content which does not have a source file **use with caution**
+    pub const NULL: Self = Self(0);
+
+    pub const fn is_null(&self) -> bool {
+        self.0 == 0
     }
 }
 
@@ -27,19 +40,5 @@ impl self_rust_tokenize::SelfRustTokenize for SourceId {
             self_rust_tokenize::proc_macro2::Span::call_site(),
         );
         self_rust_tokenize::TokenStreamExt::append(token_stream, current_source_id_reference);
-    }
-}
-
-impl SourceId {
-    /// Returns a [SourceId] handle that references a file and its content
-    pub fn new(filesystem: &mut impl FileSystem, path: PathBuf, content: String) -> Self {
-        filesystem.new_source_id(path, content)
-    }
-
-    /// For content which does not have a source file **use with caution**
-    pub const NULL: Self = Self(0);
-
-    pub const fn is_null(&self) -> bool {
-        self.0 == 0
     }
 }

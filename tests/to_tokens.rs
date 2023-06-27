@@ -7,7 +7,7 @@ fn to_tokens() {
     let span = Span {
         start: 10,
         end: 20,
-        source_id: SourceId::NULL,
+        source: SourceId::NULL,
     };
 
     assert_eq!(
