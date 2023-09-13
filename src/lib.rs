@@ -119,7 +119,7 @@ impl SourceMapBuilder {
         let mut sources = Vec::<SourceId>::new();
 
         for source_id in self.used_sources.into_iter().filter(|id| !id.is_null()) {
-            let line_splits = fs.get_source(source_id, |source| source.line_starts.0.clone());
+            let line_splits = fs.get_source_by_id(source_id, |source| source.line_starts.0.clone());
 
             source_line_splits.insert(source_id, line_splits);
             sources.push(source_id);

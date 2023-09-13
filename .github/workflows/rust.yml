@@ -37,7 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Run all tests
-        run: cargo test --workspace --verbose --all-features
+        run: cargo test --workspace --all-features
 
   clippy:
     needs: validity

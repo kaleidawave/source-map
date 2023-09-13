@@ -3,46 +3,53 @@ use crate::{encodings::*, FileSystem};
 use std::{convert::TryInto, fmt, ops::Range};
 
 /// A start and end. Also contains trace of original source
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Hash)]
 #[cfg_attr(feature = "span-serialize", derive(serde::Serialize))]
 #[cfg_attr(
     feature = "self-rust-tokenize",
     derive(self_rust_tokenize::SelfRustTokenize)
 )]
-pub struct Span {
+pub struct BaseSpan<T> {
     pub start: u32,
     pub end: u32,
-    pub source: SourceId,
+    pub source: T,
 }
+
+pub type SourceLessSpan = BaseSpan<()>;
+pub type Span = BaseSpan<SourceId>;
 
 impl fmt::Debug for Span {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.source.is_null() {
-            f.write_fmt(format_args!("{}..{}", self.start, self.end,))
-        } else {
-            f.write_fmt(format_args!(
-                "{}..{}#{}",
-                self.start, self.end, self.source.0
-            ))
+        f.write_fmt(format_args!(
+            "{}..{}#{}",
+            self.start, self.end, self.source.0
+        ))
+    }
+}
+
+impl fmt::Debug for SourceLessSpan {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!("{}..{}", self.start, self.end,))
+    }
+}
+
+impl SourceLessSpan {
+    /// Returns whether the end of `self` is the start of `other`
+    pub fn is_adjacent_to(&self, other: &Self) -> bool {
+        self.end == other.start
+    }
+
+    /// Returns a new [`SourceLessSpan`] which starts at the start of `self` a ends at the end of `other`
+    pub fn union(&self, other: &Self) -> SourceLessSpan {
+        SourceLessSpan {
+            start: self.start,
+            end: other.end,
+            source: (),
         }
     }
 }
 
 impl Span {
-    /// Returns whether the end of `self` is the start of `other`
-    pub fn is_adjacent_to(&self, other: &Self) -> bool {
-        self.source == other.source && self.end == other.start
-    }
-
-    /// Returns a new [`Span`] which starts at the start of `self` a ends at the end of `other`
-    pub fn union(&self, other: &Self) -> Span {
-        Span {
-            start: self.start,
-            end: other.end,
-            source: self.source,
-        }
-    }
-
     pub fn get_start(&self) -> Position {
         Position(self.start, self.source)
     }
@@ -55,7 +62,7 @@ impl Span {
         self,
         fs: &impl FileSystem,
     ) -> LineColumnSpan<T> {
-        fs.get_source(self.source, |source| {
+        fs.get_source_by_id(self.source, |source| {
             let line_start = source
                 .line_starts
                 .get_index_of_line_pos_is_on(self.start as usize);
@@ -94,8 +101,9 @@ impl Span {
     }
 }
 
-impl From<Span> for Range<u32> {
-    fn from(span: Span) -> Range<u32> {
+// TODO why are two implementations needed
+impl<T> From<BaseSpan<T>> for Range<u32> {
+    fn from(span: BaseSpan<T>) -> Range<u32> {
         Range {
             start: span.start,
             end: span.end,
@@ -103,8 +111,8 @@ impl From<Span> for Range<u32> {
     }
 }
 
-impl From<Span> for Range<usize> {
-    fn from(span: Span) -> Range<usize> {
+impl<T> From<BaseSpan<T>> for Range<usize> {
+    fn from(span: BaseSpan<T>) -> Range<usize> {
         Range {
             start: span.start.try_into().unwrap(),
             end: span.end.try_into().unwrap(),
@@ -131,7 +139,7 @@ impl Position {
         self,
         fs: &impl FileSystem,
     ) -> LineColumnPosition<T> {
-        fs.get_source(self.1, |source| {
+        fs.get_source_by_id(self.1, |source| {
             let line = source
                 .line_starts
                 .get_index_of_line_pos_is_on(self.0 as usize);
@@ -159,7 +167,7 @@ pub struct LineColumnPosition<T: StringEncoding> {
 
 impl<T: StringEncoding> LineColumnPosition<T> {
     pub fn into_scalar_position(self, fs: &impl FileSystem) -> Position {
-        fs.get_source(self.source, |source| {
+        fs.get_source_by_id(self.source, |source| {
             let line_byte = source.line_starts.0[self.line as usize];
             let column_length =
                 T::encoded_length_to_byte_count(&source.content[line_byte..], self.column as usize);
@@ -181,7 +189,7 @@ pub struct LineColumnSpan<T: StringEncoding> {
 
 impl<T: StringEncoding> LineColumnSpan<T> {
     pub fn into_scalar_span(self, fs: &impl FileSystem) -> Span {
-        fs.get_source(self.source, |source| {
+        fs.get_source_by_id(self.source, |source| {
             let line_start_byte = source.line_starts.0[self.line_start as usize];
             let column_start_length = T::encoded_length_to_byte_count(
                 &source.content[line_start_byte..],
@@ -257,7 +265,7 @@ impl From<lsp_types::Range> for LineColumnSpan<Utf8> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{encodings::Utf8, MapFileStore};
+    use crate::{encodings::Utf8, MapFileStore, NoPathMap};
 
     use super::*;
 
@@ -265,7 +273,7 @@ mod tests {
 I am a paragraph over two lines
 Another line";
 
-    fn get_file_system_and_source() -> (MapFileStore, SourceId) {
+    fn get_file_system_and_source() -> (MapFileStore<NoPathMap>, SourceId) {
         let mut fs = MapFileStore::default();
         let source = fs.new_source_id("".into(), SOURCE.into());
         (fs, source)

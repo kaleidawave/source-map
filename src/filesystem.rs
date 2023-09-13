@@ -1,4 +1,8 @@
-use std::{convert::TryInto, path::PathBuf, sync::RwLock};
+use std::{
+    collections::HashMap,
+    convert::TryInto,
+    path::{Path, PathBuf},
+};
 
 use crate::{lines_columns_indexes::LineStarts, SourceId, Span};
 
@@ -9,15 +13,48 @@ pub struct Source {
 }
 
 #[cfg(feature = "global-source-filesystem")]
-pub struct GlobalStore;
+pub mod global_store {
+    use super::*;
 
-// pub struct FileSystemStore;
+    pub struct GlobalStore;
+
+    #[cfg(feature = "global-source-filesystem")]
+    static SOURCE_IDS_TO_FILES: std::sync::RwLock<MapFileStore<NoPathMap>> =
+        std::sync::RwLock::new(MapFileStore {
+            sources: Vec::new(),
+            mappings: NoPathMap,
+        });
+
+    impl FileSystem for GlobalStore {
+        fn new_source_id_with_line_starts(
+            &mut self,
+            path: PathBuf,
+            content: String,
+        ) -> (SourceId, LineStarts) {
+            SOURCE_IDS_TO_FILES
+                .write()
+                .unwrap()
+                .new_source_id_with_line_starts(path, content)
+        }
+
+        fn get_source_by_id<T, F: for<'a> FnOnce(&'a Source) -> T>(
+            &self,
+            source_id: SourceId,
+            f: F,
+        ) -> T {
+            SOURCE_IDS_TO_FILES
+                .read()
+                .unwrap()
+                .get_source_by_id(source_id, f)
+        }
+    }
+}
 
 #[derive(Default)]
-pub struct MapFileStore(Vec<Source>);
-
-#[cfg(feature = "global-source-filesystem")]
-static SOURCE_IDS_TO_FILES: RwLock<MapFileStore> = RwLock::new(MapFileStore(Vec::new()));
+pub struct MapFileStore<T> {
+    sources: Vec<Source>,
+    mappings: T,
+}
 
 pub trait FileSystem: Sized {
     /// Generate a new [SourceId]
@@ -31,24 +68,28 @@ pub trait FileSystem: Sized {
         content: String,
     ) -> (SourceId, LineStarts);
 
-    fn get_source<T, F: for<'a> FnOnce(&'a Source) -> T>(&self, source_id: SourceId, f: F) -> T;
+    fn get_source_by_id<T, F: for<'a> FnOnce(&'a Source) -> T>(
+        &self,
+        source_id: SourceId,
+        f: F,
+    ) -> T;
 
     fn get_file_path_and_content(&self, source_id: SourceId) -> (PathBuf, String) {
-        self.get_source(source_id, |Source { path, content, .. }| {
+        self.get_source_by_id(source_id, |Source { path, content, .. }| {
             (path.to_owned(), content.to_owned())
         })
     }
 
     fn get_file_path(&self, source_id: SourceId) -> PathBuf {
-        self.get_source(source_id, |source| source.path.to_owned())
+        self.get_source_by_id(source_id, |source| source.path.to_owned())
     }
 
     fn get_file_content(&self, source_id: SourceId) -> String {
-        self.get_source(source_id, |source| source.content.to_owned())
+        self.get_source_by_id(source_id, |source| source.content.to_owned())
     }
 
     fn get_file_whole_span(&self, source_id: SourceId) -> Span {
-        self.get_source(source_id, |source| Span {
+        self.get_source_by_id(source_id, |source| Span {
             start: 0,
             end: source
                 .content
@@ -68,7 +109,7 @@ pub trait FileSystem: Sized {
     where
         I::Output: Sized + ToOwned,
     {
-        self.get_source(source_id, |s| s.content.get(indexer).map(|v| v.to_owned()))
+        self.get_source_by_id(source_id, |s| s.content.get(indexer).map(|v| v.to_owned()))
     }
 
     #[cfg(feature = "codespan-reporting")]
@@ -77,25 +118,7 @@ pub trait FileSystem: Sized {
     }
 }
 
-#[cfg(feature = "global-source-filesystem")]
-impl FileSystem for GlobalStore {
-    fn new_source_id_with_line_starts(
-        &mut self,
-        path: PathBuf,
-        content: String,
-    ) -> (SourceId, LineStarts) {
-        SOURCE_IDS_TO_FILES
-            .write()
-            .unwrap()
-            .new_source_id_with_line_starts(path, content)
-    }
-
-    fn get_source<T, F: for<'a> FnOnce(&'a Source) -> T>(&self, source_id: SourceId, f: F) -> T {
-        SOURCE_IDS_TO_FILES.read().unwrap().get_source(source_id, f)
-    }
-}
-
-impl FileSystem for MapFileStore {
+impl<M: PathMap> FileSystem for MapFileStore<M> {
     fn new_source_id_with_line_starts(
         &mut self,
         path: PathBuf,
@@ -103,17 +126,59 @@ impl FileSystem for MapFileStore {
     ) -> (SourceId, LineStarts) {
         let line_starts = LineStarts::new(&content);
         let source = Source {
-            path,
+            path: path.clone(),
             content,
             line_starts: line_starts.clone(),
         };
-        self.0.push(source);
+        self.sources.push(source);
+        let source_id = SourceId(self.sources.len().try_into().unwrap());
+        self.mappings.set_path(path, source_id);
+
         // Import that this is after. SourceId(0) is SourceId::NULL
-        (SourceId(self.0.len().try_into().unwrap()), line_starts)
+        (source_id, line_starts)
     }
 
-    fn get_source<T, F: for<'a> FnOnce(&'a Source) -> T>(&self, source_id: SourceId, f: F) -> T {
-        f(&self.0[source_id.0 as usize - 1])
+    fn get_source_by_id<T, F: for<'a> FnOnce(&'a Source) -> T>(
+        &self,
+        source_id: SourceId,
+        f: F,
+    ) -> T {
+        f(&self.sources[source_id.0 as usize - 1])
+    }
+}
+
+#[derive(Default)]
+pub struct NoPathMap;
+
+#[derive(Default)]
+pub struct WithPathMap(HashMap<PathBuf, SourceId>);
+
+impl PathMap for NoPathMap {
+    fn set_path(&mut self, _path: PathBuf, _source: SourceId) {}
+}
+
+impl PathMap for WithPathMap {
+    fn set_path(&mut self, path: PathBuf, source: SourceId) {
+        self.0.insert(path, source);
+    }
+}
+
+pub trait PathMap {
+    fn set_path(&mut self, path: PathBuf, source: SourceId);
+}
+
+impl MapFileStore<WithPathMap> {
+    /// TODO partial updates
+    pub fn update_file_at_path(&mut self, path: &Path, content: String) {
+        self.sources[self.mappings.0[path].0 as usize].content = content;
+    }
+
+    /// Either a rename or move
+    pub fn change_file_path(&mut self, from: &Path, to: PathBuf) {
+        let id = self.mappings.0[from];
+        self.sources[id.0 as usize].path = to;
+        self.mappings.0.remove(from);
+        self.mappings.0.insert(from.to_path_buf(), id);
     }
 }
 
@@ -143,7 +208,7 @@ impl<'a, T: FileSystem> codespan_reporting::files::Files<'a> for CodeSpanStore<'
         id: Self::FileId,
         byte_index: usize,
     ) -> Result<usize, codespan_reporting::files::Error> {
-        Ok(self.0.get_source(id, |source| {
+        Ok(self.0.get_source_by_id(id, |source| {
             source
                 .line_starts
                 .0
@@ -158,7 +223,7 @@ impl<'a, T: FileSystem> codespan_reporting::files::Files<'a> for CodeSpanStore<'
         id: Self::FileId,
         line_index: usize,
     ) -> Result<std::ops::Range<usize>, codespan_reporting::files::Error> {
-        self.0.get_source(id, |source| {
+        self.0.get_source_by_id(id, |source| {
             /// Copied from codespan-reporting
             fn line_start(
                 line_starts: &[usize],

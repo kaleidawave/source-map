@@ -3,15 +3,18 @@
 [![crates.io badge](https://img.shields.io/crates/v/source-map?style=flat-square)](https://crates.io/crates/source-map)
 [![docs.rs badge](https://img.shields.io/docsrs/source-map?style=flat-square)](https://docs.rs/source-map/latest)
 
-Utilities for building source maps (v3) for a compiler and handling source location representations
+Utilities for building source maps (v3), handling source location representations and source files
 
 ## Includes
+
 - `Span`, a structure which represents a section of a specific source
+- `SpanWithoutSource`, a structure which represents a general section without a specific source
 - `SourceId`, a identifier for a source file
 - `StringWithSourceMap`, along with the `ToString` trait makes generating string representations with and adding source markings trivial
-- With the `lsp-types-morphisms` features makes converting between the position information in [lsp-types](https://docs.rs/crate/lsp-types/latest) easy
+- A `lsp-types-morphisms` feature which allows conversion of position type to [lsp-types](https://docs.rs/crate/lsp-types/latest)
+- `FileSystem` for storing source files and their information
 
-## Example
+## Source map example
 
 ```shell
 git clone https://github.com/kaleidawave/source-map

@@ -1,7 +1,9 @@
 /// Given a file, removes whitespace and returns the result along with a source map
-#[cfg(feature = "inline-source-map")]
+#[cfg(all(feature = "inline-source-map", feature = "global-source-filesystem"))]
 fn main() {
-    use source_map::{FileSystem, GlobalStore, SourceId, Span, StringWithSourceMap, ToString};
+    use source_map::{
+        global_store::GlobalStore, FileSystem, SourceId, Span, StringWithSourceMap, ToString,
+    };
     use split_indices::split_indices_from_str;
     use std::{convert::TryInto, env::args, fs};
 
@@ -93,7 +95,7 @@ fn main() {
     fs::write(output, source_map.build_with_inline_source_map(&fs)).expect("Write failed");
 }
 
-#[cfg(not(feature = "inline-source-map"))]
+#[cfg(not(all(feature = "inline-source-map", feature = "global-source-filesystem")))]
 fn main() {
     panic!("Enable 'inline-source-map' for this demo");
 }
