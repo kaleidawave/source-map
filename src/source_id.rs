@@ -3,7 +3,7 @@ use std::{fmt, path::PathBuf};
 
 /// A identifier for a [crate::Source]
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
-#[cfg_attr(feature = "span-serialize", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde-serialize", derive(serde::Serialize))]
 pub struct SourceId(pub(crate) u16);
 
 impl fmt::Debug for SourceId {

@@ -1,4 +1,4 @@
-use crate::{FileSystem, SourceMap, SourceMapBuilder, Span};
+use crate::{FileSystem, SourceMap, SourceMapBuilder, SpanWithSource};
 
 /// A trait for defining behavior of adding content to a buffer. As well as register markers for source maps
 pub trait ToString {
@@ -13,7 +13,7 @@ pub trait ToString {
     fn push_str_contains_new_line(&mut self, string: &str);
 
     /// Adds a mapping of the from a original position in the source to the position in the current buffer
-    fn add_mapping(&mut self, source_span: &Span);
+    fn add_mapping(&mut self, source_span: &SpanWithSource);
 }
 
 // TODO clarify calls
@@ -34,7 +34,7 @@ impl ToString for String {
         self.push_str(string)
     }
 
-    fn add_mapping(&mut self, _source_span: &Span) {}
+    fn add_mapping(&mut self, _source_span: &SpanWithSource) {}
 }
 
 /// Building a source along with its source map
@@ -89,7 +89,7 @@ impl ToString for StringWithSourceMap {
         self.0.push_str(slice);
     }
 
-    fn add_mapping(&mut self, source_span: &Span) {
+    fn add_mapping(&mut self, source_span: &SpanWithSource) {
         self.1.add_mapping(source_span);
     }
 }
@@ -125,7 +125,7 @@ impl ToString for Counter {
         self.0 += string.len();
     }
 
-    fn add_mapping(&mut self, _source_span: &Span) {}
+    fn add_mapping(&mut self, _source_span: &SpanWithSource) {}
 }
 
 #[cfg(test)]

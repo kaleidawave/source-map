@@ -2,7 +2,8 @@
 #[cfg(all(feature = "inline-source-map", feature = "global-source-filesystem"))]
 fn main() {
     use source_map::{
-        global_store::GlobalStore, FileSystem, SourceId, Span, StringWithSourceMap, ToString,
+        global_store::GlobalStore, FileSystem, SourceId, SpanWithSource, StringWithSourceMap,
+        ToString,
     };
     use split_indices::split_indices_from_str;
     use std::{convert::TryInto, env::args, fs};
@@ -69,11 +70,12 @@ fn main() {
 
         for (range, chunk) in split_indices_from_str(string, char::is_whitespace) {
             if !chunk.is_empty() {
-                output.add_mapping(&Span {
+                let base_span = SpanWithSource {
                     start: range.start.try_into().unwrap(),
                     end: range.end.try_into().unwrap(),
                     source: source_id,
-                });
+                };
+                output.add_mapping(&base_span);
                 output.push_str(chunk);
             }
         }

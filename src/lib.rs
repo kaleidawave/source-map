@@ -15,8 +15,8 @@ use std::{
 pub use filesystem::*;
 pub use lines_columns_indexes::LineStarts;
 pub use source_id::SourceId;
-pub use span::{LineColumnPosition, LineColumnSpan, Position, Span};
-pub use to_string::{Counter, StringWithSourceMap, ToString};
+pub use span::*;
+pub use to_string::*;
 
 const BASE64_ALPHABET: &[u8; 64] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -89,19 +89,19 @@ impl SourceMapBuilder {
     }
 
     /// Original line and original column are one indexed
-    pub fn add_mapping(&mut self, source_position: &Span) {
-        let Span {
+    pub fn add_mapping(&mut self, source_position: &SpanWithSource) {
+        let SpanWithSource {
             start: source_byte_start,
             // TODO should it read this
             end: _source_byte_end,
             source: from_source,
-        } = source_position.clone();
+        } = source_position;
 
-        self.used_sources.insert(from_source);
+        self.used_sources.insert(from_source.clone());
 
         self.mappings.push(MappingOrBreak::Mapping(SourceMapping {
-            from_source,
-            source_byte_start: source_byte_start.try_into().unwrap(),
+            from_source: from_source.clone(),
+            source_byte_start: source_byte_start.clone().try_into().unwrap(),
             on_output_column: self.current_output_column,
             // source_byte_end: *source_byte_end,
             // on_output_line: self.current_output_line,

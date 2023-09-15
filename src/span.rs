@@ -4,7 +4,7 @@ use std::{convert::TryInto, fmt, ops::Range};
 
 /// A start and end. Also contains trace of original source
 #[derive(PartialEq, Eq, Clone, Hash)]
-#[cfg_attr(feature = "span-serialize", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde-serialize", derive(serde::Serialize))]
 #[cfg_attr(
     feature = "self-rust-tokenize",
     derive(self_rust_tokenize::SelfRustTokenize)
@@ -15,10 +15,10 @@ pub struct BaseSpan<T> {
     pub source: T,
 }
 
-pub type SourceLessSpan = BaseSpan<()>;
-pub type Span = BaseSpan<SourceId>;
+pub type Span = BaseSpan<()>;
+pub type SpanWithSource = BaseSpan<SourceId>;
 
-impl fmt::Debug for Span {
+impl fmt::Debug for SpanWithSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_fmt(format_args!(
             "{}..{}#{}",
@@ -27,29 +27,57 @@ impl fmt::Debug for Span {
     }
 }
 
-impl fmt::Debug for SourceLessSpan {
+impl fmt::Debug for Span {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_fmt(format_args!("{}..{}", self.start, self.end,))
     }
 }
 
-impl SourceLessSpan {
-    /// Returns whether the end of `self` is the start of `other`
-    pub fn is_adjacent_to(&self, other: &Self) -> bool {
-        self.end == other.start
+impl Span {
+    /// TODO explain use cases
+    pub const NULL_SPAN: Span = Span {
+        start: 0,
+        end: 0,
+        source: (),
+    };
+
+    /// TODO explain use cases
+    pub fn is_null(&self) -> bool {
+        self.start == self.end
     }
 
-    /// Returns a new [`SourceLessSpan`] which starts at the start of `self` a ends at the end of `other`
-    pub fn union(&self, other: &Self) -> SourceLessSpan {
-        SourceLessSpan {
+    /// Returns whether the end of `self` is the start of `other`
+    pub fn is_adjacent_to(&self, other: impl Into<Start>) -> bool {
+        self.end == other.into().0
+    }
+
+    /// Returns a new [`Span`] which starts at the start of `self` a ends at the end of `other`
+    pub fn union(&self, end: impl Into<End>) -> Span {
+        Span {
             start: self.start,
-            end: other.end,
+            end: end.into().0,
             source: (),
+        }
+    }
+
+    pub fn get_end(&self) -> End {
+        End(self.end)
+    }
+
+    pub fn get_start(&self) -> Start {
+        Start(self.start)
+    }
+
+    pub fn with_source(self, source: SourceId) -> SpanWithSource {
+        SpanWithSource {
+            start: self.start,
+            end: self.end,
+            source,
         }
     }
 }
 
-impl Span {
+impl SpanWithSource {
     pub fn get_start(&self) -> Position {
         Position(self.start, self.source)
     }
@@ -89,7 +117,7 @@ impl Span {
     }
 
     /// TODO explain use cases
-    pub const NULL_SPAN: Span = Span {
+    pub const NULL_SPAN: SpanWithSource = SpanWithSource {
         start: 0,
         end: 0,
         source: SourceId::NULL,
@@ -98,6 +126,14 @@ impl Span {
     /// TODO explain use cases
     pub fn is_null(&self) -> bool {
         self.source == SourceId::NULL
+    }
+
+    pub fn without_source(self) -> Span {
+        Span {
+            start: self.start,
+            end: self.end,
+            source: (),
+        }
     }
 }
 
@@ -120,17 +156,83 @@ impl<T> From<BaseSpan<T>> for Range<usize> {
     }
 }
 
+/// The byte start
+#[derive(Debug, Clone, Copy)]
+pub struct Start(pub u32);
+
+impl Start {
+    pub fn new(pos: u32) -> Self {
+        Self(pos)
+    }
+
+    pub fn with_length(&self, len: usize) -> BaseSpan<()> {
+        BaseSpan {
+            start: self.0,
+            end: self.0 + len as u32,
+            source: (),
+        }
+    }
+
+    pub fn get_end_after(&self, len: usize) -> End {
+        End(self.0 + len as u32)
+    }
+}
+
+/// The byte start
+#[derive(Debug, Clone, Copy)]
+pub struct End(pub u32);
+
+impl End {
+    pub fn new(pos: u32) -> Self {
+        Self(pos)
+    }
+
+    pub fn is_adjacent_to(&self, other: impl Into<Start>) -> bool {
+        self.0 == other.into().0
+    }
+}
+
+impl From<Span> for Start {
+    fn from(value: Span) -> Self {
+        Start(value.start)
+    }
+}
+
+impl From<Span> for End {
+    fn from(value: Span) -> Self {
+        End(value.start)
+    }
+}
+
+impl<'a> From<&'a Span> for Start {
+    fn from(value: &'a Span) -> Self {
+        Start(value.start)
+    }
+}
+
+impl<'a> From<&'a Span> for End {
+    fn from(value: &'a Span) -> Self {
+        End(value.start)
+    }
+}
+
+impl Start {
+    pub fn union(&self, end: impl Into<End>) -> Span {
+        Span {
+            start: self.0,
+            end: end.into().0,
+            source: (),
+        }
+    }
+}
+
 /// A scalar/singular byte wise position. **Zero based**
 #[derive(PartialEq, Eq, Clone)]
 pub struct Position(pub u32, pub SourceId);
 
 impl fmt::Debug for Position {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.1.is_null() {
-            f.write_fmt(format_args!("{}", self.0,))
-        } else {
-            f.write_fmt(format_args!("{}#{}", self.0, self.1 .0))
-        }
+        f.write_fmt(format_args!("{}#{}", self.0, self.1 .0))
     }
 }
 
@@ -188,7 +290,7 @@ pub struct LineColumnSpan<T: StringEncoding> {
 }
 
 impl<T: StringEncoding> LineColumnSpan<T> {
-    pub fn into_scalar_span(self, fs: &impl FileSystem) -> Span {
+    pub fn into_scalar_span(self, fs: &impl FileSystem) -> SpanWithSource {
         fs.get_source_by_id(self.source, |source| {
             let line_start_byte = source.line_starts.0[self.line_start as usize];
             let column_start_length = T::encoded_length_to_byte_count(
@@ -202,7 +304,7 @@ impl<T: StringEncoding> LineColumnSpan<T> {
                 self.column_start as usize,
             );
 
-            Span {
+            SpanWithSource {
                 start: (line_start_byte + column_start_length).try_into().unwrap(),
                 end: (line_end_byte + column_end_length).try_into().unwrap(),
                 source: self.source,
@@ -283,7 +385,7 @@ Another line";
     fn scalar_span_to_line_column() {
         let (fs, source) = get_file_system_and_source();
 
-        let paragraph_span = Span {
+        let paragraph_span = SpanWithSource {
             start: 19,
             end: 28,
             source,

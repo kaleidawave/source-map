@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{lines_columns_indexes::LineStarts, SourceId, Span};
+use crate::{lines_columns_indexes::LineStarts, SourceId, SpanWithSource};
 
 pub struct Source {
     pub path: PathBuf,
@@ -88,8 +88,8 @@ pub trait FileSystem: Sized {
         self.get_source_by_id(source_id, |source| source.content.to_owned())
     }
 
-    fn get_file_whole_span(&self, source_id: SourceId) -> Span {
-        self.get_source_by_id(source_id, |source| Span {
+    fn get_file_whole_span(&self, source_id: SourceId) -> SpanWithSource {
+        self.get_source_by_id(source_id, |source| SpanWithSource {
             start: 0,
             end: source
                 .content
