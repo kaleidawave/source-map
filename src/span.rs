@@ -200,7 +200,7 @@ impl From<Span> for Start {
 
 impl From<Span> for End {
     fn from(value: Span) -> Self {
-        End(value.start)
+        End(value.end)
     }
 }
 
@@ -212,7 +212,7 @@ impl<'a> From<&'a Span> for Start {
 
 impl<'a> From<&'a Span> for End {
     fn from(value: &'a Span) -> Self {
-        End(value.start)
+        End(value.end)
     }
 }
 
