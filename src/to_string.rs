@@ -54,11 +54,15 @@ impl StringWithSourceMap {
     #[cfg(feature = "inline-source-map")]
     /// Build the output and append the source map in base 64
     pub fn build_with_inline_source_map(self, filesystem: &impl FileSystem) -> String {
+        use base64::Engine;
+
         let Self(mut source, source_map) = self;
         let built_source_map = source_map.build(filesystem);
         // Inline URL:
         source.push_str("\n//# sourceMappingURL=data:application/json;base64,");
-        source.push_str(&base64::encode(built_source_map.to_json(filesystem)));
+        source.push_str(
+            &base64::prelude::BASE64_STANDARD.encode(built_source_map.to_json(filesystem)),
+        );
         source
     }
 }

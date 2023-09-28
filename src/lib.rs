@@ -97,11 +97,11 @@ impl SourceMapBuilder {
             source: from_source,
         } = source_position;
 
-        self.used_sources.insert(from_source.clone());
+        self.used_sources.insert(*from_source);
 
         self.mappings.push(MappingOrBreak::Mapping(SourceMapping {
-            from_source: from_source.clone(),
-            source_byte_start: source_byte_start.clone().try_into().unwrap(),
+            from_source: *from_source,
+            source_byte_start: (*source_byte_start).try_into().unwrap(),
             on_output_column: self.current_output_column,
             // source_byte_end: *source_byte_end,
             // on_output_line: self.current_output_line,

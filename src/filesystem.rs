@@ -167,10 +167,23 @@ pub trait PathMap {
     fn set_path(&mut self, path: PathBuf, source: SourceId);
 }
 
+impl<T: PathMap> MapFileStore<T> {
+    pub fn update_file(&mut self, id: SourceId, content: String) {
+        self.sources[id.0 as usize].content = content;
+    }
+
+    /// Returns the NEW length of the file's content
+    pub fn append_to_file(&mut self, id: SourceId, content: &str) -> usize {
+        let existing = &mut self.sources[id.0 as usize].content;
+        existing.push_str(content);
+        existing.len()
+    }
+}
+
 impl MapFileStore<WithPathMap> {
     /// TODO partial updates
     pub fn update_file_at_path(&mut self, path: &Path, content: String) {
-        self.sources[self.mappings.0[path].0 as usize].content = content;
+        self.update_file(self.mappings.0[path], content);
     }
 
     /// Either a rename or move

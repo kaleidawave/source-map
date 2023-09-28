@@ -67,8 +67,8 @@ mod tests {
         let mut last = iterator.next().unwrap();
         for part in iterator {
             let value = &source[last..part];
-            let value = value.strip_suffix("\n").unwrap();
-            let value = value.strip_suffix("\r").unwrap_or(value);
+            let value = value.strip_suffix('\n').unwrap();
+            let value = value.strip_suffix('\r').unwrap_or(value);
             actual_lines.push(value);
             last = part;
         }
