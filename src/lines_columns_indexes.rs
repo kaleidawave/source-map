@@ -12,6 +12,11 @@ impl LineStarts {
         )
     }
 
+    pub fn append(&mut self, start: usize, appended: &str) {
+        self.0
+            .extend(appended.match_indices('\n').map(|(i, _)| i + 1 + start))
+    }
+
     pub fn byte_indexes_on_same_line(&self, pos1: usize, pos2: usize) -> bool {
         debug_assert!(pos1 <= pos2);
         self.0
@@ -74,6 +79,20 @@ mod tests {
         }
 
         assert_eq!(expected_lines, actual_lines);
+    }
+
+    #[test]
+    fn append() {
+        let source = get_source();
+
+        let whole = LineStarts::new(&source);
+        let at = 100;
+        let (left, right) = source.split_at(at);
+
+        let mut left = LineStarts::new(left);
+        left.append(at, right);
+
+        assert_eq!(whole.0, left.0);
     }
 
     #[test]

@@ -169,14 +169,18 @@ pub trait PathMap {
 
 impl<T: PathMap> MapFileStore<T> {
     pub fn update_file(&mut self, id: SourceId, content: String) {
-        self.sources[id.0 as usize - 1].content = content;
+        let item = &mut self.sources[id.0 as usize - 1];
+        item.line_starts = LineStarts::new(&content);
+        item.content = content;
     }
 
-    /// Returns the NEW length of the file's content
-    pub fn append_to_file(&mut self, id: SourceId, content: &str) -> usize {
-        let existing = &mut self.sources[id.0 as usize - 1].content;
-        existing.push_str(content);
-        existing.len()
+    /// Returns the OLD and NEW length of the file's content
+    pub fn append_to_file(&mut self, id: SourceId, content: &str) -> (usize, usize) {
+        let existing = &mut self.sources[id.0 as usize - 1];
+        let old_length = existing.content.len();
+        existing.line_starts.append(old_length, content);
+        existing.content.push_str(content);
+        (old_length, existing.content.len())
     }
 }
 
