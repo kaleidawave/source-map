@@ -190,6 +190,10 @@ impl MapFileStore<WithPathMap> {
         self.update_file(self.mappings.0[path], content);
     }
 
+    pub fn get_source_at_path(&self, path: &Path) -> Option<SourceId> {
+        self.mappings.0.get(path).copied()
+    }
+
     /// Either a rename or move
     pub fn change_file_path(&mut self, from: &Path, to: PathBuf) {
         let id = self.mappings.0[from];
@@ -206,6 +210,7 @@ pub struct CodeSpanStore<'a, T: FileSystem>(&'a T);
 impl<'a, T: FileSystem> codespan_reporting::files::Files<'a> for CodeSpanStore<'a, T> {
     type FileId = SourceId;
     type Name = String;
+    // TODO should just be &str
     type Source = String;
 
     fn name(&'a self, id: Self::FileId) -> Result<Self::Name, codespan_reporting::files::Error> {
