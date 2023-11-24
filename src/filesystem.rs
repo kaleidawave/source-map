@@ -185,21 +185,32 @@ impl<T: PathMap> MapFileStore<T> {
 }
 
 impl MapFileStore<WithPathMap> {
+    /// Updates an **existing** entry
+    ///
     /// TODO partial updates
     pub fn update_file_at_path(&mut self, path: &Path, content: String) {
         self.update_file(self.mappings.0[path], content);
     }
 
+    /// Returns a possible [SourceId] for a path
     pub fn get_source_at_path(&self, path: &Path) -> Option<SourceId> {
         self.mappings.0.get(path).copied()
     }
 
-    /// Either a rename or move
+    /// Either a rename or move. **Must already exist**
     pub fn change_file_path(&mut self, from: &Path, to: PathBuf) {
         let id = self.mappings.0[from];
         self.sources[id.0 as usize - 1].path = to;
         self.mappings.0.remove(from);
         self.mappings.0.insert(from.to_path_buf(), id);
+    }
+
+    pub fn create_or_update_file_at_path(&mut self, path: &Path, content: String) {
+        if let Some(existing_id) = self.mappings.0.get(path) {
+            self.update_file(*existing_id, content);
+        } else {
+            self.new_source_id(path.to_path_buf(), content);
+        }
     }
 }
 
@@ -239,14 +250,14 @@ impl<'a, T: FileSystem> codespan_reporting::files::Files<'a> for CodeSpanStore<'
         }))
     }
 
-    // Implementation copied from codespan codebase
     fn line_range(
         &'a self,
         id: Self::FileId,
         line_index: usize,
     ) -> Result<std::ops::Range<usize>, codespan_reporting::files::Error> {
+        // Implementation copied from codespan codebase
         self.0.get_source_by_id(id, |source| {
-            /// Copied from codespan-reporting
+            // Copied from codespan-reporting
             fn line_start(
                 line_starts: &[usize],
                 line_index: usize,

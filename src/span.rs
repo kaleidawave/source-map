@@ -1,17 +1,24 @@
 use super::SourceId;
 use crate::{encodings::*, FileSystem};
-use std::{convert::TryInto, fmt, ops::Range};
+use std::{any::TypeId, convert::TryInto, fmt, ops::Range};
 
-/// A start and end. Also contains trace of original source
-#[derive(PartialEq, Eq, Clone, Hash)]
+/// For serialization checking
+#[allow(unused)]
+fn is_empty<T: 'static>(_t: &T) -> bool {
+    TypeId::of::<T>() == TypeId::of::<()>()
+}
+
+/// A start and end. Also contains trace of original source (depending on `T`)
+#[derive(PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature = "serde-serialize", derive(serde::Serialize))]
 #[cfg_attr(
     feature = "self-rust-tokenize",
     derive(self_rust_tokenize::SelfRustTokenize)
 )]
-pub struct BaseSpan<T> {
+pub struct BaseSpan<T: 'static> {
     pub start: u32,
     pub end: u32,
+    #[cfg_attr(feature = "serde-serialize", serde(skip_serializing_if = "is_empty"))]
     pub source: T,
 }
 

@@ -2,8 +2,10 @@ use crate::{FileSystem, SourceMap, SourceMapBuilder, SpanWithSource};
 
 /// A trait for defining behavior of adding content to a buffer. As well as register markers for source maps
 pub trait ToString {
+    /// Append character
     fn push(&mut self, chr: char);
 
+    /// Append a new line character
     fn push_new_line(&mut self);
 
     /// Use [ToString::push_str_contains_new_line] if `string` could contain new lines
@@ -14,6 +16,12 @@ pub trait ToString {
 
     /// Adds a mapping of the from a original position in the source to the position in the current buffer
     fn add_mapping(&mut self, source_span: &SpanWithSource);
+
+    /// Some implementors might not ToString the whole input. This signals for users to end early as further usage
+    /// of this trait has no effect
+    fn halt(&self) -> bool {
+        false
+    }
 }
 
 // TODO clarify calls
@@ -122,19 +130,60 @@ impl ToString for Counter {
     }
 
     fn push_str(&mut self, string: &str) {
-        self.0 += string.len();
+        self.0 += string.chars().count();
     }
 
     fn push_str_contains_new_line(&mut self, string: &str) {
-        self.0 += string.len();
+        self.0 += string.chars().count();
     }
 
     fn add_mapping(&mut self, _source_span: &SpanWithSource) {}
 }
 
+/// Counts text until a limit. Used for telling whether the text is greater than some threshold
+pub struct MaxCounter {
+    acc: usize,
+    max: usize,
+}
+
+impl MaxCounter {
+    pub fn new(max: usize) -> Self {
+        Self { acc: 0, max }
+    }
+
+    /// TODO temp to see overshoot
+    pub fn get_acc(&self) -> usize {
+        self.acc
+    }
+}
+
+impl ToString for MaxCounter {
+    fn push(&mut self, chr: char) {
+        self.acc += chr.len_utf8();
+    }
+
+    fn push_new_line(&mut self) {
+        self.push('\n');
+    }
+
+    fn push_str(&mut self, string: &str) {
+        self.acc += string.len();
+    }
+
+    fn push_str_contains_new_line(&mut self, string: &str) {
+        self.acc += string.len();
+    }
+
+    fn add_mapping(&mut self, _source_span: &SpanWithSource) {}
+
+    fn halt(&self) -> bool {
+        self.acc > self.max
+    }
+}
+
 #[cfg(test)]
 mod to_string_tests {
-    use super::{Counter, ToString};
+    use super::*;
 
     fn serializer<T: ToString>(t: &mut T) {
         t.push_str("Hello");
@@ -153,6 +202,15 @@ mod to_string_tests {
     fn counting() {
         let mut s = Counter::new();
         serializer(&mut s);
-        assert_eq!(s.get_count(), 11);
+        assert_eq!(s.get_count(), "Hello World".chars().count());
+    }
+
+    #[test]
+    fn max_counter() {
+        let mut s = MaxCounter::new(14);
+        serializer(&mut s);
+        assert!(!s.halt());
+        serializer(&mut s);
+        assert!(s.halt());
     }
 }
