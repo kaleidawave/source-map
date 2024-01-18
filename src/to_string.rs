@@ -1,4 +1,6 @@
-use crate::{FileSystem, SourceMap, SourceMapBuilder, SpanWithSource};
+use crate::{
+    count_characters_on_last_line, FileSystem, SourceMap, SourceMapBuilder, SpanWithSource,
+};
 
 /// A trait for defining behavior of adding content to a buffer. As well as register markers for source maps
 pub trait ToString {
@@ -21,9 +23,11 @@ pub trait ToString {
 
     /// Some implementors might not ToString the whole input. This signals for users to end early as further usage
     /// of this trait has no effect
-    fn halt(&self) -> bool {
+    fn should_halt(&self) -> bool {
         false
     }
+
+    fn characters_on_current_line(&self) -> u32;
 }
 
 // TODO clarify calls
@@ -45,11 +49,16 @@ impl ToString for String {
     }
 
     fn add_mapping(&mut self, _source_span: &SpanWithSource) {}
+
+    fn characters_on_current_line(&self) -> u32 {
+        count_characters_on_last_line(self)
+    }
 }
 
 pub struct Writable<T: std::io::Write> {
     pub writable: T,
-    pub length: usize,
+    pub length: u32,
+    pub since_new_line: u32,
     pub source_map: Option<SourceMapBuilder>,
 }
 
@@ -57,7 +66,9 @@ impl<T: std::io::Write> ToString for Writable<T> {
     fn push(&mut self, chr: char) {
         let mut buf = [0u8; 4]; // A char can be at most 4 bytes in UTF-8
         let buf = chr.encode_utf8(&mut buf).as_bytes();
-        self.length += chr.len_utf8();
+        let char_size = chr.len_utf8();
+        self.length += char_size as u32;
+        self.since_new_line += char_size as u32;
         self.writable.write_all(buf).unwrap();
     }
 
@@ -67,87 +78,31 @@ impl<T: std::io::Write> ToString for Writable<T> {
     }
 
     fn push_str(&mut self, string: &str) {
-        self.length += string.len();
+        self.length += string.len() as u32;
+        self.since_new_line += string.len() as u32;
         self.writable.write_all(string.as_bytes()).unwrap();
     }
 
     fn push_str_contains_new_line(&mut self, slice: &str) {
-        self.length += slice.len();
+        self.length += slice.len() as u32;
         self.writable.write_all(slice.as_bytes()).unwrap();
         if let Some(ref mut sm) = self.source_map {
-            for chr in slice.chars() {
-                if chr == '\n' {
-                    sm.add_new_line()
-                }
-            }
+            slice
+                .chars()
+                .filter(|chr| *chr == '\n')
+                .for_each(|_| sm.add_new_line());
         }
+        self.since_new_line = count_characters_on_last_line(slice);
     }
 
     fn add_mapping(&mut self, source_span: &SpanWithSource) {
         if let Some(ref mut sm) = self.source_map {
-            sm.add_mapping(source_span);
-        }
-    }
-}
-
-/// Building a source along with its source map
-#[derive(Default)]
-pub struct StringWithSourceMap(String, SourceMapBuilder);
-
-impl StringWithSourceMap {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Returns source and the source map
-    pub fn build(self, filesystem: &impl FileSystem) -> (String, SourceMap) {
-        (self.0, self.1.build(filesystem))
-    }
-
-    #[cfg(feature = "inline-source-map")]
-    /// Build the output and append the source map in base 64
-    pub fn build_with_inline_source_map(self, filesystem: &impl FileSystem) -> String {
-        use base64::Engine;
-
-        let Self(mut source, source_map) = self;
-        let built_source_map = source_map.build(filesystem);
-        // Inline URL:
-        source.push_str("\n//# sourceMappingURL=data:application/json;base64,");
-        source.push_str(
-            &base64::prelude::BASE64_STANDARD.encode(built_source_map.to_json(filesystem)),
-        );
-        source
-    }
-}
-
-// TODO use ToString for self.0
-impl ToString for StringWithSourceMap {
-    fn push(&mut self, chr: char) {
-        self.0.push(chr);
-        self.1.add_to_column(chr.len_utf16());
-    }
-
-    fn push_new_line(&mut self) {
-        self.0.push('\n');
-        self.1.add_new_line();
-    }
-
-    fn push_str(&mut self, slice: &str) {
-        self.0.push_str(slice);
-        self.1.add_to_column(slice.chars().count());
-    }
-
-    fn push_str_contains_new_line(&mut self, slice: &str) {
-        self.0.push_str(slice);
-        for chr in slice.chars() {
-            if chr == '\n' {
-                self.1.add_new_line()
-            }
+            sm.add_mapping(source_span, self.since_new_line);
         }
     }
 
-    fn add_mapping(&mut self, source_span: &SpanWithSource) {
-        self.1.add_mapping(source_span);
+    fn characters_on_current_line(&self) -> u32 {
+        self.since_new_line
     }
 }
 
@@ -159,6 +114,7 @@ pub struct StringWithOptionalSourceMap {
     pub source: String,
     pub source_map: Option<SourceMapBuilder>,
     pub quit_after: Option<usize>,
+    pub since_new_line: u32,
 }
 
 impl StringWithOptionalSourceMap {
@@ -167,10 +123,11 @@ impl StringWithOptionalSourceMap {
             source: String::new(),
             source_map: with_source_map.then(SourceMapBuilder::new),
             quit_after: None,
+            since_new_line: 0,
         }
     }
 
-    /// Returns source and the source map
+    /// Returns output and the source map
     pub fn build(self, filesystem: &impl FileSystem) -> (String, Option<SourceMap>) {
         (self.source, self.source_map.map(|sm| sm.build(filesystem)))
     }
@@ -184,6 +141,7 @@ impl StringWithOptionalSourceMap {
             mut source,
             source_map,
             quit_after: _,
+            since_new_line: _,
         } = self;
         let built_source_map = source_map.unwrap().build(filesystem);
         // Inline URL:
@@ -220,78 +178,47 @@ impl ToString for StringWithOptionalSourceMap {
     fn push_str_contains_new_line(&mut self, slice: &str) {
         self.source.push_str(slice);
         if let Some(ref mut sm) = self.source_map {
-            for chr in slice.chars() {
-                if chr == '\n' {
-                    sm.add_new_line()
-                }
-            }
+            slice
+                .chars()
+                .filter(|chr| *chr == '\n')
+                .for_each(|_| sm.add_new_line());
         }
+        self.since_new_line = count_characters_on_last_line(slice);
     }
 
     fn add_mapping(&mut self, source_span: &SpanWithSource) {
         if let Some(ref mut sm) = self.source_map {
-            sm.add_mapping(source_span);
+            sm.add_mapping(source_span, self.since_new_line);
         }
     }
 
-    fn halt(&self) -> bool {
+    fn should_halt(&self) -> bool {
         self.quit_after
             .map_or(false, |quit_after| self.source.len() > quit_after)
     }
-}
 
-/// Used for getting **byte count** of the result when built into string without building the string
-#[derive(Default)]
-pub struct Counter(usize);
-
-impl Counter {
-    pub fn new() -> Self {
-        Self::default()
+    fn characters_on_current_line(&self) -> u32 {
+        self.since_new_line
     }
-
-    pub fn get_count(self) -> usize {
-        self.0
-    }
-}
-
-impl ToString for Counter {
-    fn push(&mut self, chr: char) {
-        self.0 += chr.len_utf8();
-    }
-
-    fn push_new_line(&mut self) {
-        self.push('\n');
-    }
-
-    fn push_str(&mut self, string: &str) {
-        self.0 += string.chars().count();
-    }
-
-    fn push_str_contains_new_line(&mut self, string: &str) {
-        self.0 += string.chars().count();
-    }
-
-    fn add_mapping(&mut self, _source_span: &SpanWithSource) {}
 }
 
 /// Counts text until a limit. Used for telling whether the text is greater than some threshold
-pub struct MaxCounter {
+pub struct Counter {
     acc: usize,
     max: usize,
 }
 
-impl MaxCounter {
+impl Counter {
     pub fn new(max: usize) -> Self {
         Self { acc: 0, max }
     }
 
-    /// TODO temp to see overshoot
-    pub fn get_acc(&self) -> usize {
+    pub fn get_count(&self) -> usize {
         self.acc
     }
 }
 
-impl ToString for MaxCounter {
+impl ToString for Counter {
     fn push(&mut self, chr: char) {
         self.acc += chr.len_utf8();
     }
@@ -310,8 +237,13 @@ impl ToString for MaxCounter {
 
     fn add_mapping(&mut self, _source_span: &SpanWithSource) {}
 
-    fn halt(&self) -> bool {
+    fn should_halt(&self) -> bool {
         self.acc > self.max
+    }
+
+    fn characters_on_current_line(&self) -> u32 {
+        // TODO?
+        0
     }
 }
 
@@ -334,17 +266,17 @@ mod to_string_tests {
 
     #[test]
     fn counting() {
-        let mut s = Counter::new();
+        let mut s = Counter::new(usize::MAX);
         serializer(&mut s);
         assert_eq!(s.get_count(), "Hello World".chars().count());
     }
 
     #[test]
     fn max_counter() {
-        let mut s = MaxCounter::new(14);
+        let mut s = Counter::new(14);
         serializer(&mut s);
-        assert!(!s.halt());
+        assert!(!s.should_halt());
         serializer(&mut s);
-        assert!(s.halt());
+        assert!(s.should_halt());
     }
 }

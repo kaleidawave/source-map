@@ -2,8 +2,8 @@
 #[cfg(all(feature = "inline-source-map", feature = "global-source-filesystem"))]
 fn main() {
     use source_map::{
-        global_store::GlobalStore, FileSystem, SourceId, SpanWithSource, StringWithSourceMap,
-        ToString,
+        global_store::GlobalStore, FileSystem, SourceId, SpanWithSource,
+        StringWithOptionalSourceMap, ToString,
     };
     use std::{env::args, fs};
 
@@ -35,7 +35,7 @@ fn main() {
         }
     }
 
-    let mut source_map = StringWithSourceMap::new();
+    let mut source_map = StringWithOptionalSourceMap::new(true);
 
     let mut arguments = args().skip(1);
     let (input, output) = (
