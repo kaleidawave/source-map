@@ -47,6 +47,49 @@ impl ToString for String {
     fn add_mapping(&mut self, _source_span: &SpanWithSource) {}
 }
 
+pub struct Writable<T: std::io::Write> {
+    pub writable: T,
+    pub length: usize,
+    pub source_map: Option<SourceMapBuilder>,
+}
+
+impl<T: std::io::Write> ToString for Writable<T> {
+    fn push(&mut self, chr: char) {
+        let mut buf = [0u8; 4]; // A char can be at most 4 bytes in UTF-8
+        let buf = chr.encode_utf8(&mut buf).as_bytes();
+        self.length += chr.len_utf8();
+        self.writable.write_all(buf).unwrap();
+    }
+
+    fn push_new_line(&mut self) {
+        self.length += 1;
+        self.writable.write_all(&[b'\n']).unwrap();
+    }
+
+    fn push_str(&mut self, string: &str) {
+        self.length += string.len();
+        self.writable.write_all(string.as_bytes()).unwrap();
+    }
+
+    fn push_str_contains_new_line(&mut self, slice: &str) {
+        self.length += slice.len();
+        self.writable.write_all(slice.as_bytes()).unwrap();
+        if let Some(ref mut sm) = self.source_map {
+            for chr in slice.chars() {
+                if chr == '\n' {
+                    sm.add_new_line()
+                }
+            }
+        }
+    }
+
+    fn add_mapping(&mut self, source_span: &SpanWithSource) {
+        if let Some(ref mut sm) = self.source_map {
+            sm.add_mapping(source_span);
+        }
+    }
+}
+
 /// Building a source along with its source map
 #[derive(Default)]
 pub struct StringWithSourceMap(String, SourceMapBuilder);

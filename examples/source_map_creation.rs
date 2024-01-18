@@ -7,8 +7,9 @@ fn main() {
     };
     use std::{env::args, fs};
 
-    /// A simple string split, returns chunk plus byte indexes of chunk
-    fn n_words_a_line(fs: &mut impl FileSystem, string: &str, output: &mut impl ToString) {
+    // Splits a string by whitespace and appends them back ensuring there
+    // are a fixed number of words on each line
+    fn transform(string: &str, output: &mut impl ToString, fs: &mut impl FileSystem) {
         let source_id = SourceId::new(fs, "file.txt".into(), string.to_owned());
 
         for (idx, chunk) in string
@@ -45,7 +46,7 @@ fn main() {
 
     let mut fs = GlobalStore;
 
-    n_words_a_line(&mut fs, &file_as_string, &mut source_map);
+    transform(&file_as_string, &mut source_map, &mut fs);
 
     fs::write(output, source_map.build_with_inline_source_map(&fs)).expect("Write failed");
 }
