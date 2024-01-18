@@ -9,6 +9,9 @@ keywords = ["source-map"]
 categories = ["web-programming"]
 repository = "https://github.com/kaleidawave/source-map"
 
+[lints.clippy]
+all = "deny"
+
 [dependencies]
 lsp-types = { version = "0", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }

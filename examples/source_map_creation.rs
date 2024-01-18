@@ -5,78 +5,32 @@ fn main() {
         global_store::GlobalStore, FileSystem, SourceId, SpanWithSource, StringWithSourceMap,
         ToString,
     };
-    use split_indices::split_indices_from_str;
-    use std::{convert::TryInto, env::args, fs};
+    use std::{env::args, fs};
 
-    /// A simple string split, returns chunk plus byte indexes of chunk
-    mod split_indices {
-        use std::{ops::Range, str::CharIndices};
-
-        pub struct SplitIndices<'a, T: Fn(char) -> bool> {
-            pub string: &'a str,
-            pub function: T,
-            pub last_match: usize,
-            pub char_iterator: CharIndices<'a>,
-            pub exhausted: bool,
-        }
-
-        pub fn split_indices_from_str<'a, T: Fn(char) -> bool>(
-            string: &'a str,
-            function: T,
-        ) -> SplitIndices<'a, T> {
-            SplitIndices {
-                string,
-                function,
-                last_match: 0,
-                char_iterator: string.char_indices(),
-                exhausted: false,
-            }
-        }
-
-        impl<'a, T: Fn(char) -> bool> Iterator for SplitIndices<'a, T> {
-            type Item = (Range<usize>, &'a str);
-
-            fn next(&mut self) -> Option<Self::Item> {
-                if self.exhausted {
-                    return None;
-                }
-                let Self {
-                    char_iterator,
-                    function,
-                    ..
-                } = self;
-
-                let find_map = char_iterator
-                    .by_ref()
-                    .find_map(|(idx, char)| (function)(char).then(|| (idx, char)));
-
-                if let Some((idx, char)) = find_map {
-                    let start = self.last_match;
-                    let end = idx + char.len_utf8();
-                    self.last_match = end;
-                    let range = start..idx;
-                    Some((range.clone(), &self.string[range]))
-                } else {
-                    let range = self.last_match..self.string.len();
-                    self.exhausted = true;
-                    Some((range.clone(), &self.string[range]))
-                }
-            }
-        }
-    }
-
-    fn remove_whitespace(fs: &mut impl FileSystem, string: &str, output: &mut impl ToString) {
+    // Splits a string by whitespace and appends them back ensuring there
+    // are a fixed number of words on each line
+    fn transform(string: &str, output: &mut impl ToString, fs: &mut impl FileSystem) {
         let source_id = SourceId::new(fs, "file.txt".into(), string.to_owned());
 
-        for (range, chunk) in split_indices_from_str(string, char::is_whitespace) {
-            if !chunk.is_empty() {
-                let base_span = SpanWithSource {
-                    start: range.start.try_into().unwrap(),
-                    end: range.end.try_into().unwrap(),
-                    source: source_id,
-                };
-                output.add_mapping(&base_span);
-                output.push_str(chunk);
+        for (idx, chunk) in string
+            .split(char::is_whitespace)
+            .filter(|s| !s.is_empty())
+            .enumerate()
+        {
+            // Compute the start position in the string using pointer offsets
+            let start = chunk.as_ptr() as u32 - string.as_ptr() as u32;
+            let base_span = SpanWithSource {
+                start,
+                end: start + chunk.len() as u32,
+                source: source_id,
+            };
+            output.add_mapping(&base_span);
+            output.push_str(chunk);
+            output.push(' ');
+
+            const WORDS_PER_LINE: usize = 5;
+            if idx % WORDS_PER_LINE + 1 == WORDS_PER_LINE {
+                output.push_new_line();
             }
         }
     }
@@ -92,7 +46,7 @@ fn main() {
 
     let mut fs = GlobalStore;
 
-    remove_whitespace(&mut fs, &file_as_string, &mut source_map);
+    transform(&file_as_string, &mut source_map, &mut fs);
 
     fs::write(output, source_map.build_with_inline_source_map(&fs)).expect("Write failed");
 }
