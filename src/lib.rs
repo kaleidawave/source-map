@@ -55,6 +55,7 @@ struct SourceMapping {
 #[derive(Debug)]
 enum MappingOrBreak {
     Mapping(SourceMapping),
+    /// From new line in output
     Break,
 }
 
@@ -115,13 +116,14 @@ impl SourceMapBuilder {
     /// TODO are the accounts for SourceId::null valid here...?
     pub fn build(self, fs: &impl FileSystem) -> SourceMap {
         // Splits are indexes of new lines in the source
-        let mut source_line_splits = HashMap::<SourceId, Vec<_>>::new();
+        let mut source_line_splits = HashMap::<SourceId, LineStarts>::new();
         let mut sources = Vec::<SourceId>::new();
 
         for source_id in self.used_sources.into_iter().filter(|id| !id.is_null()) {
-            let line_splits = fs.get_source_by_id(source_id, |source| source.line_starts.0.clone());
-
-            source_line_splits.insert(source_id, line_splits);
+            source_line_splits.insert(
+                source_id,
+                fs.get_source_by_id(source_id, |source| source.line_starts.clone()),
+            );
             sources.push(source_id);
         }
 
@@ -167,46 +169,8 @@ impl SourceMapBuilder {
 
                     let line_splits_for_this_file = source_line_splits.get(&from_source).unwrap();
 
-                    // TODO explain
-                    let (source_line, source_column) = match line_splits_for_this_file.as_slice() {
-                        [] => (0, source_byte_start),
-                        [split] => {
-                            if source_byte_start < *split {
-                                (0, source_byte_start)
-                            } else {
-                                (1, source_byte_start - split)
-                            }
-                        }
-                        splits => {
-                            if source_byte_start < *splits.first().unwrap() {
-                                (0, source_byte_start)
-                            } else if source_byte_start > *splits.last().unwrap() {
-                                (splits.len(), source_byte_start - splits.last().unwrap())
-                            } else {
-                                let splits =
-                                    splits.windows(2).enumerate().find_map(|(line, window)| {
-                                        if let [floor, ceil] = window {
-                                            if *floor < source_byte_start
-                                                && source_byte_start <= *ceil
-                                            {
-                                                Some((line + 1, source_byte_start - floor - 1))
-                                            } else {
-                                                None
-                                            }
-                                        } else {
-                                            unreachable!()
-                                        }
-                                    });
-
-                                if let Some(splits) = splits {
-                                    splits
-                                } else {
-                                    eprintln!("Didn't find ...");
-                                    (0, source_byte_start)
-                                }
-                            }
-                        }
-                    };
+                    let (source_line, source_column) =
+                        line_splits_for_this_file.get_line_and_column_pos_is_on(source_byte_start);
 
                     let source_line_diff = source_line as isize - last_mapped_source_line as isize;
                     vlq_encode_integer_to_buffer(&mut mappings, source_line_diff);

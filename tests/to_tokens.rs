@@ -2,7 +2,7 @@
 #[test]
 fn to_tokens() {
     use self_rust_tokenize::SelfRustTokenize;
-    use source_map::{SourceId, SpanWithSource};
+    use source_map::{Nullable, SourceId, SpanWithSource};
 
     let span = SpanWithSource {
         start: 10,

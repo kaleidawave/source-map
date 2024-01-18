@@ -15,6 +15,8 @@ pub trait ToString {
     fn push_str_contains_new_line(&mut self, string: &str);
 
     /// Adds a mapping of the from a original position in the source to the position in the current buffer
+    ///
+    /// **Should be called before adding new content**
     fn add_mapping(&mut self, source_span: &SpanWithSource);
 
     /// Some implementors might not ToString the whole input. This signals for users to end early as further usage
@@ -78,31 +80,120 @@ impl StringWithSourceMap {
 // TODO use ToString for self.0
 impl ToString for StringWithSourceMap {
     fn push(&mut self, chr: char) {
-        self.1.add_to_column(chr.len_utf16());
         self.0.push(chr);
+        self.1.add_to_column(chr.len_utf16());
     }
 
     fn push_new_line(&mut self) {
-        self.1.add_new_line();
         self.0.push('\n');
+        self.1.add_new_line();
     }
 
     fn push_str(&mut self, slice: &str) {
-        self.1.add_to_column(slice.chars().count());
         self.0.push_str(slice);
+        self.1.add_to_column(slice.chars().count());
     }
 
     fn push_str_contains_new_line(&mut self, slice: &str) {
+        self.0.push_str(slice);
         for chr in slice.chars() {
             if chr == '\n' {
                 self.1.add_new_line()
             }
         }
-        self.0.push_str(slice);
     }
 
     fn add_mapping(&mut self, source_span: &SpanWithSource) {
         self.1.add_mapping(source_span);
+    }
+}
+
+/// Building a source along with its source map
+///
+/// Really for debug builds
+#[derive(Default)]
+pub struct StringWithOptionalSourceMap {
+    pub source: String,
+    pub source_map: Option<SourceMapBuilder>,
+    pub quit_after: Option<usize>,
+}
+
+impl StringWithOptionalSourceMap {
+    pub fn new(with_source_map: bool) -> Self {
+        Self {
+            source: String::new(),
+            source_map: with_source_map.then(SourceMapBuilder::new),
+            quit_after: None,
+        }
+    }
+
+    /// Returns source and the source map
+    pub fn build(self, filesystem: &impl FileSystem) -> (String, Option<SourceMap>) {
+        (self.source, self.source_map.map(|sm| sm.build(filesystem)))
+    }
+
+    #[cfg(feature = "inline-source-map")]
+    /// Build the output and append the source map in base 64
+    pub fn build_with_inline_source_map(self, filesystem: &impl FileSystem) -> String {
+        use base64::Engine;
+
+        let Self {
+            mut source,
+            source_map,
+            quit_after: _,
+        } = self;
+        let built_source_map = source_map.unwrap().build(filesystem);
+        // Inline URL:
+        source.push_str("\n//# sourceMappingURL=data:application/json;base64,");
+        source.push_str(
+            &base64::prelude::BASE64_STANDARD.encode(built_source_map.to_json(filesystem)),
+        );
+        source
+    }
+}
+
+impl ToString for StringWithOptionalSourceMap {
+    fn push(&mut self, chr: char) {
+        self.source.push(chr);
+        if let Some(ref mut sm) = self.source_map {
+            sm.add_to_column(chr.len_utf16());
+        }
+    }
+
+    fn push_new_line(&mut self) {
+        self.source.push('\n');
+        if let Some(ref mut sm) = self.source_map {
+            sm.add_new_line();
+        }
+    }
+
+    fn push_str(&mut self, slice: &str) {
+        self.source.push_str(slice);
+        if let Some(ref mut sm) = self.source_map {
+            sm.add_to_column(slice.chars().count());
+        }
+    }
+
+    fn push_str_contains_new_line(&mut self, slice: &str) {
+        self.source.push_str(slice);
+        if let Some(ref mut sm) = self.source_map {
+            for chr in slice.chars() {
+                if chr == '\n' {
+                    sm.add_new_line()
+                }
+            }
+        }
+    }
+
+    fn add_mapping(&mut self, source_span: &SpanWithSource) {
+        if let Some(ref mut sm) = self.source_map {
+            sm.add_mapping(source_span);
+        }
+    }
+
+    fn halt(&self) -> bool {
+        self.quit_after
+            .map_or(false, |quit_after| self.source.len() > quit_after)
     }
 }
 

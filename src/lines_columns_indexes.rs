@@ -31,8 +31,8 @@ impl LineStarts {
 
     pub fn byte_indexes_crosses_lines(&self, pos1: usize, pos2: usize) -> usize {
         debug_assert!(pos1 <= pos2);
-        let first_line_backwards = self.get_index_of_line_pos_is_on(pos1);
-        let second_line_backwards = self.get_index_of_line_pos_is_on(pos2);
+        let first_line_backwards = self.get_line_pos_is_on(pos1);
+        let second_line_backwards = self.get_line_pos_is_on(pos2);
         second_line_backwards - first_line_backwards
     }
 
@@ -40,15 +40,22 @@ impl LineStarts {
         self.byte_indexes_crosses_lines(pos1, pos2) > 0
     }
 
-    pub(crate) fn get_index_of_line_pos_is_on(&self, pos: usize) -> usize {
+    /// 0 indexed
+    pub(crate) fn get_line_pos_is_on(&self, pos: usize) -> usize {
+        self.get_line_and_column_pos_is_on(pos).0
+    }
+
+    /// 0 indexed
+    pub(crate) fn get_line_and_column_pos_is_on(&self, pos: usize) -> (usize, usize) {
         let backwards_index = self
             .0
             .iter()
             .rev()
             .position(|index| pos >= *index)
-            .expect("pos1 out of bounds");
+            .expect("pos out of bounds");
 
-        (self.0.len() - 1) - backwards_index
+        let line = (self.0.len() - 1) - backwards_index;
+        (line, pos - self.0[line])
     }
 }
 

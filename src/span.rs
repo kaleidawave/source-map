@@ -25,6 +25,30 @@ pub struct BaseSpan<T: 'static> {
 pub type Span = BaseSpan<()>;
 pub type SpanWithSource = BaseSpan<SourceId>;
 
+pub trait Nullable: PartialEq + Eq + Sized {
+    const NULL: Self;
+
+    fn is_null(&self) -> bool {
+        self == &Self::NULL
+    }
+}
+
+impl Nullable for () {
+    const NULL: Self = ();
+}
+
+impl Nullable for SourceId {
+    const NULL: Self = SourceId(0);
+}
+
+impl<T: Nullable> Nullable for BaseSpan<T> {
+    const NULL: Self = BaseSpan {
+        start: 0,
+        end: 0,
+        source: T::NULL,
+    };
+}
+
 impl fmt::Debug for SpanWithSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_fmt(format_args!(
@@ -41,18 +65,6 @@ impl fmt::Debug for Span {
 }
 
 impl Span {
-    /// TODO explain use cases
-    pub const NULL_SPAN: Span = Span {
-        start: 0,
-        end: 0,
-        source: (),
-    };
-
-    /// TODO explain use cases
-    pub fn is_null(&self) -> bool {
-        self.start == self.end
-    }
-
     /// Returns whether the end of `self` is the start of `other`
     pub fn is_adjacent_to(&self, other: impl Into<Start>) -> bool {
         self.end == other.into().0
@@ -98,16 +110,12 @@ impl SpanWithSource {
         fs: &impl FileSystem,
     ) -> LineColumnSpan<T> {
         fs.get_source_by_id(self.source, |source| {
-            let line_start = source
-                .line_starts
-                .get_index_of_line_pos_is_on(self.start as usize);
+            let line_start = source.line_starts.get_line_pos_is_on(self.start as usize);
             let line_start_byte = source.line_starts.0[line_start];
             let column_start =
                 T::get_encoded_length(&source.content[line_start_byte..(self.start as usize)]);
 
-            let line_end = source
-                .line_starts
-                .get_index_of_line_pos_is_on(self.end as usize);
+            let line_end = source.line_starts.get_line_pos_is_on(self.end as usize);
             let line_end_byte = source.line_starts.0[line_end];
             let column_end =
                 T::get_encoded_length(&source.content[line_end_byte..(self.end as usize)]);
@@ -121,18 +129,6 @@ impl SpanWithSource {
                 source: self.source,
             }
         })
-    }
-
-    /// TODO explain use cases
-    pub const NULL_SPAN: SpanWithSource = SpanWithSource {
-        start: 0,
-        end: 0,
-        source: SourceId::NULL,
-    };
-
-    /// TODO explain use cases
-    pub fn is_null(&self) -> bool {
-        self.source == SourceId::NULL
     }
 
     pub fn without_source(self) -> Span {
@@ -249,9 +245,7 @@ impl Position {
         fs: &impl FileSystem,
     ) -> LineColumnPosition<T> {
         fs.get_source_by_id(self.1, |source| {
-            let line = source
-                .line_starts
-                .get_index_of_line_pos_is_on(self.0 as usize);
+            let line = source.line_starts.get_line_pos_is_on(self.0 as usize);
             let line_byte = source.line_starts.0[line];
             let column =
                 T::get_encoded_length(&source.content[line_byte..(self.0 as usize)]) as u32;

@@ -17,13 +17,6 @@ impl SourceId {
     pub fn new(filesystem: &mut impl FileSystem, path: PathBuf, content: String) -> Self {
         filesystem.new_source_id(path, content)
     }
-
-    /// For content which does not have a source file **use with caution**
-    pub const NULL: Self = Self(0);
-
-    pub const fn is_null(&self) -> bool {
-        self.0 == 0
-    }
 }
 
 #[cfg(feature = "self-rust-tokenize")]
