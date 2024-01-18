@@ -159,6 +159,7 @@ impl ToString for StringWithOptionalSourceMap {
         if let Some(ref mut sm) = self.source_map {
             sm.add_to_column(chr.len_utf16());
         }
+        self.since_new_line += chr.len_utf8() as u32;
     }
 
     fn push_new_line(&mut self) {
@@ -166,6 +167,7 @@ impl ToString for StringWithOptionalSourceMap {
         if let Some(ref mut sm) = self.source_map {
             sm.add_new_line();
         }
+        self.since_new_line = 0;
     }
 
     fn push_str(&mut self, slice: &str) {
@@ -173,6 +175,7 @@ impl ToString for StringWithOptionalSourceMap {
         if let Some(ref mut sm) = self.source_map {
             sm.add_to_column(slice.chars().count());
         }
+        self.since_new_line += slice.len() as u32;
     }
 
     fn push_str_contains_new_line(&mut self, slice: &str) {

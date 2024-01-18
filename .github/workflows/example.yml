@@ -33,4 +33,6 @@ jobs:
           \`\`\`
           $(cat LICENSE.map)
           \`\`\`
+
+          > ctrl-c the above output and paste into https://evanw.github.io/source-map-visualization
           " >> $GITHUB_STEP_SUMMARY
