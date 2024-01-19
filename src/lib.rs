@@ -44,8 +44,8 @@ fn vlq_encode_integer_to_buffer(buf: &mut String, mut value: isize) {
 
 #[derive(Debug)]
 struct SourceMapping {
-    pub(crate) on_output_column: usize,
-    pub(crate) source_byte_start: usize,
+    pub(crate) on_output_column: u32,
+    pub(crate) source_byte_start: u32,
     pub(crate) from_source: SourceId,
     // TODO are these needed
     // pub(crate) on_output_line: usize,
@@ -55,18 +55,18 @@ struct SourceMapping {
 #[derive(Debug)]
 enum MappingOrBreak {
     Mapping(SourceMapping),
-    /// From new line in output
+    /// From new line in output. These are encoded as `;`
     Break,
 }
 
 /// Struct for building a [source map (v3)](https://sourcemaps.info/spec.html)
 #[derive(Default)]
 pub struct SourceMapBuilder {
-    current_output_line: usize,
-    current_output_column: usize,
+    current_output_line: u32,
+    current_output_column: u32,
     #[allow(dead_code)]
-    last_output_line: Option<usize>,
-    last_output_column: usize,
+    last_output_line: Option<u32>,
+    // last_output_column: usize,
     mappings: Vec<MappingOrBreak>,
     used_sources: HashSet<SourceId>,
 }
@@ -80,17 +80,15 @@ impl SourceMapBuilder {
     pub fn add_new_line(&mut self) {
         self.current_output_line += 1;
         self.mappings.push(MappingOrBreak::Break);
-        self.current_output_column = 0;
-        self.last_output_column = 0;
     }
 
     // Record a new line was added to output
     pub fn add_to_column(&mut self, length: usize) {
-        self.current_output_column += length;
+        self.current_output_column += length as u32;
     }
 
     /// Original line and original column are one indexed
-    pub fn add_mapping(&mut self, source_position: &SpanWithSource) {
+    pub fn add_mapping(&mut self, source_position: &SpanWithSource, current_column: u32) {
         let SpanWithSource {
             start: source_byte_start,
             // TODO should it read this
@@ -103,7 +101,7 @@ impl SourceMapBuilder {
         self.mappings.push(MappingOrBreak::Mapping(SourceMapping {
             from_source: *from_source,
             source_byte_start: (*source_byte_start).try_into().unwrap(),
-            on_output_column: self.current_output_column,
+            on_output_column: current_column,
             // source_byte_end: *source_byte_end,
             // on_output_line: self.current_output_line,
         }));
@@ -169,8 +167,8 @@ impl SourceMapBuilder {
 
                     let line_splits_for_this_file = source_line_splits.get(&from_source).unwrap();
 
-                    let (source_line, source_column) =
-                        line_splits_for_this_file.get_line_and_column_pos_is_on(source_byte_start);
+                    let (source_line, source_column) = line_splits_for_this_file
+                        .get_line_and_column_pos_is_on(source_byte_start as usize);
 
                     let source_line_diff = source_line as isize - last_mapped_source_line as isize;
                     vlq_encode_integer_to_buffer(&mut mappings, source_line_diff);
@@ -197,6 +195,18 @@ impl SourceMapBuilder {
 
         SourceMap { mappings, sources }
     }
+}
+
+fn count_characters_on_last_line(s: &str) -> u32 {
+    let mut count = 0u32;
+    for b in s.as_bytes().iter().rev() {
+        if *b == b'\n' {
+            return count;
+        }
+        // I think the byte count should be fine
+        count += 1;
+    }
+    count
 }
 
 #[derive(Clone)]
