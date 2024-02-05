@@ -11,6 +11,7 @@ fn is_empty<T: 'static>(_t: &T) -> bool {
 /// A start and end. Also contains trace of original source (depending on `T`)
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature = "serde-serialize", derive(serde::Serialize))]
+#[cfg_attr(target_family = "wasm", derive(tsify::Tsify))]
 #[cfg_attr(
     feature = "self-rust-tokenize",
     derive(self_rust_tokenize::SelfRustTokenize)
@@ -22,7 +23,9 @@ pub struct BaseSpan<T: 'static> {
     pub source: T,
 }
 
+#[cfg_attr(target_family = "wasm", tsify::declare)]
 pub type Span = BaseSpan<()>;
+#[cfg_attr(target_family = "wasm", tsify::declare)]
 pub type SpanWithSource = BaseSpan<SourceId>;
 
 pub trait Nullable: PartialEq + Eq + Sized {
