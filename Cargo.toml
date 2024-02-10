@@ -19,6 +19,10 @@ base64 = { version = "0.21", optional = true }
 codespan-reporting = { version = "0.11", optional = true }
 self-rust-tokenize = { version = "0.3", optional = true }
 
+[target.'cfg(target_family = "wasm")'.dependencies]
+wasm-bindgen = "=0.2.89"
+tsify = "0.4.5"
+
 [features]
 default = ["global-source-filesystem"]
 self-rust-tokenize = ["dep:self-rust-tokenize"]
