@@ -3,18 +3,21 @@
 [![crates.io badge](https://img.shields.io/crates/v/source-map?style=flat-square)](https://crates.io/crates/source-map)
 [![docs.rs badge](https://img.shields.io/docsrs/source-map?style=flat-square)](https://docs.rs/source-map/latest)
 
-Utilities for building source maps (v3), handling source location representations and source files
+Utilities for building source maps (v3), handling source location representations and source files.
 
 ## Includes
 
-- `Span`, a structure which represents a section of a specific source
+- `SpanWithSource`, a structure which represents a section of a specific source
 - `SpanWithoutSource`, a structure which represents a general section without a specific source
 - `SourceId`, a identifier for a source file
-- `StringWithSourceMap`, along with the `ToString` trait makes generating string representations with and adding source markings trivial
+- `StringWithOptionalSourceMap`, along with the `ToString` trait makes generating string representations with and adding source markings trivial
 - A `lsp-types-morphisms` feature which allows conversion of position type to [lsp-types](https://docs.rs/crate/lsp-types/latest)
-- `FileSystem` for storing source files and their information
+- The `MapFileStore` struct and the `FileSystem` trait for storing source files and other information
+- Utilities for turning byte indices into line and column information
 
-## Source map example
+## Source map generation example
+
+See [generated example on GitHub actions](https://github.com/kaleidawave/source-map/actions/workflows/example.yml).
 
 ```shell
 git clone https://github.com/kaleidawave/source-map

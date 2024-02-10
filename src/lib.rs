@@ -1,4 +1,5 @@
 #![allow(clippy::useless_conversion)]
+#![doc = include_str!("../README.md")]
 
 pub mod encodings;
 mod filesystem;
