@@ -9,45 +9,9 @@ use crate::{lines_columns_indexes::LineStarts, SourceId, SpanWithSource};
 pub struct Source {
     pub path: PathBuf,
     pub content: String,
+    /// This is computed ahead of time for fast conversion for byte-indexes to line-column indexes
+    /// which is needed for source map generation and also printing code blocks in diagnostics
     pub(crate) line_starts: LineStarts,
-}
-
-#[cfg(feature = "global-source-filesystem")]
-pub mod global_store {
-    use super::*;
-
-    pub struct GlobalStore;
-
-    #[cfg(feature = "global-source-filesystem")]
-    static SOURCE_IDS_TO_FILES: std::sync::RwLock<MapFileStore<NoPathMap>> =
-        std::sync::RwLock::new(MapFileStore {
-            sources: Vec::new(),
-            mappings: NoPathMap,
-        });
-
-    impl FileSystem for GlobalStore {
-        fn new_source_id_with_line_starts(
-            &mut self,
-            path: PathBuf,
-            content: String,
-        ) -> (SourceId, LineStarts) {
-            SOURCE_IDS_TO_FILES
-                .write()
-                .unwrap()
-                .new_source_id_with_line_starts(path, content)
-        }
-
-        fn get_source_by_id<T, F: for<'a> FnOnce(&'a Source) -> T>(
-            &self,
-            source_id: SourceId,
-            f: F,
-        ) -> T {
-            SOURCE_IDS_TO_FILES
-                .read()
-                .unwrap()
-                .get_source_by_id(source_id, f)
-        }
-    }
 }
 
 #[derive(Default)]
@@ -133,11 +97,10 @@ impl<M: PathMap> FileSystem for MapFileStore<M> {
         (source_id, line_starts)
     }
 
-    fn get_source_by_id<T, F: for<'a> FnOnce(&'a Source) -> T>(
-        &self,
-        source_id: SourceId,
-        f: F,
-    ) -> T {
+    fn get_source_by_id<T, F>(&self, source_id: SourceId, f: F) -> T
+    where
+        F: for<'a> FnOnce(&'a Source) -> T,
+    {
         f(&self.sources[source_id.0 as usize - 1])
     }
 }

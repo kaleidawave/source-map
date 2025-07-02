@@ -19,7 +19,7 @@ impl SourceId {
         filesystem.new_source_id(path, content)
     }
 
-    /// Construct a `SourceId` from a custom `FileSystem` implementation 
+    /// Construct a `SourceId` from a custom `FileSystem` implementation
     #[doc(hidden)]
     pub fn new_from_u16(id: u16) -> Self {
         Self(id)

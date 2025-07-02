@@ -26,7 +26,7 @@ fn main() {
             };
             output.add_mapping(&base_span);
             output.push_str(chunk);
-            output.push(' ');
+            output.push_char(' ');
 
             const WORDS_PER_LINE: usize = 5;
             if idx % WORDS_PER_LINE + 1 == WORDS_PER_LINE {
