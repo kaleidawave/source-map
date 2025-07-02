@@ -36,7 +36,7 @@ fn vlq_encode_integer_to_buffer(buf: &mut String, mut value: isize) {
         if value > 0 {
             clamped |= 32;
         }
-        buf.push(BASE64_ALPHABET[clamped as usize] as char);
+        buf.push_char(BASE64_ALPHABET[clamped as usize] as char);
         if value <= 0 {
             break;
         }
@@ -150,7 +150,7 @@ impl SourceMapBuilder {
                     }
 
                     if let Some(false) = last_was_break {
-                        mappings.push(',');
+                        mappings.push_char(',');
                     }
 
                     let output_column =
@@ -187,7 +187,7 @@ impl SourceMapBuilder {
                     last_was_break = Some(false);
                 }
                 MappingOrBreak::Break => {
-                    mappings.push(';');
+                    mappings.push_char(';');
                     last_was_break = Some(true);
                     last_mapped_output_column = 0;
                 }
@@ -232,8 +232,8 @@ impl SourceMap {
             .enumerate()
         {
             if idx != 0 {
-                sources.push(',');
-                sources_content.push(',');
+                sources.push_char(',');
+                sources_content.push_char(',');
             }
             write!(
                 sources,

@@ -5,13 +5,21 @@ use crate::{
 /// A trait for defining behavior of adding content to a buffer. As well as register markers for source maps
 pub trait ToString {
     /// Append character
-    fn push(&mut self, chr: char);
+    fn push_u8(&mut self, chr: u8);
+
+    /// Append character
+    fn push_char(&mut self, chr: char);
 
     /// Append a new line character
     fn push_new_line(&mut self);
 
     /// Use [ToString::push_str_contains_new_line] if `string` could contain new lines
-    fn push_str(&mut self, string: &str);
+    fn push_str(&mut self, string: &str) {
+        self.push_slice(string.as_bytes())
+    }
+
+    /// Use [ToString::push_str_contains_new_line] if `string` could contain new lines
+    fn push_slice(&mut self, slice: &[u8]);
 
     /// Used to push strings that may contain new lines
     fn push_str_contains_new_line(&mut self, string: &str);
@@ -36,16 +44,24 @@ pub trait ToString {
 
 // TODO clarify calls
 impl ToString for String {
-    fn push(&mut self, chr: char) {
+    fn push_u8(&mut self, chr: u8) {
+        self.push(chr as char);
+    }
+
+    fn push_char(&mut self, chr: char) {
         self.push(chr);
     }
 
     fn push_new_line(&mut self) {
-        self.push('\n');
+        self.push_char('\n');
     }
 
     fn push_str(&mut self, string: &str) {
         self.push_str(string)
+    }
+
+    fn push_slice(&mut self, slice: &[u8]) {
+        self.push_str(str::from_utf8(slice).unwrap())
     }
 
     fn push_str_contains_new_line(&mut self, string: &str) {
@@ -67,7 +83,13 @@ pub struct Writable<T: std::io::Write> {
 }
 
 impl<T: std::io::Write> ToString for Writable<T> {
-    fn push(&mut self, chr: char) {
+    fn push_u8(&mut self, item: u8) {
+        self.length += 1;
+        self.since_new_line += 1;
+        self.writable.write_all(&[item]).unwrap();
+    }
+
+    fn push_char(&mut self, chr: char) {
         let mut buf = [0u8; 4]; // A char can be at most 4 bytes in UTF-8
         let buf = chr.encode_utf8(&mut buf).as_bytes();
         let char_size = chr.len_utf8();
@@ -78,13 +100,19 @@ impl<T: std::io::Write> ToString for Writable<T> {
 
     fn push_new_line(&mut self) {
         self.length += 1;
-        self.writable.write_all(&[b'\n']).unwrap();
+        self.writable.write_all(b"\n").unwrap();
     }
 
     fn push_str(&mut self, string: &str) {
         self.length += string.len() as u32;
         self.since_new_line += string.len() as u32;
         self.writable.write_all(string.as_bytes()).unwrap();
+    }
+
+    fn push_slice(&mut self, slice: &[u8]) {
+        self.length += slice.len() as u32;
+        self.since_new_line += slice.len() as u32;
+        self.writable.write_all(slice).unwrap();
     }
 
     fn push_str_contains_new_line(&mut self, slice: &str) {
@@ -158,8 +186,16 @@ impl StringWithOptionalSourceMap {
 }
 
 impl ToString for StringWithOptionalSourceMap {
-    fn push(&mut self, chr: char) {
-        self.source.push(chr);
+    fn push_u8(&mut self, item: u8) {
+        self.source.push_u8(item);
+        if let Some(ref mut sm) = self.source_map {
+            sm.add_to_column(1);
+        }
+        self.since_new_line += 1;
+    }
+
+    fn push_char(&mut self, chr: char) {
+        self.source.push_char(chr);
         if let Some(ref mut sm) = self.source_map {
             sm.add_to_column(chr.len_utf16());
         }
@@ -167,7 +203,7 @@ impl ToString for StringWithOptionalSourceMap {
     }
 
     fn push_new_line(&mut self) {
-        self.source.push('\n');
+        self.source.push_char('\n');
         if let Some(ref mut sm) = self.source_map {
             sm.add_new_line();
         }
@@ -178,6 +214,14 @@ impl ToString for StringWithOptionalSourceMap {
         self.source.push_str(slice);
         if let Some(ref mut sm) = self.source_map {
             sm.add_to_column(slice.chars().count());
+        }
+        self.since_new_line += slice.len() as u32;
+    }
+
+    fn push_slice(&mut self, slice: &[u8]) {
+        self.source.push_slice(slice);
+        if let Some(ref mut sm) = self.source_map {
+            sm.add_to_column(slice.len());
         }
         self.since_new_line += slice.len() as u32;
     }
@@ -201,7 +245,7 @@ impl ToString for StringWithOptionalSourceMap {
 
     fn should_halt(&self) -> bool {
         self.quit_after
-            .map_or(false, |quit_after| self.source.len() > quit_after)
+            .is_some_and(|quit_after| self.source.len() > quit_after)
     }
 
     fn characters_on_current_line(&self) -> u32 {
@@ -230,16 +274,24 @@ impl Counter {
 }
 
 impl ToString for Counter {
-    fn push(&mut self, chr: char) {
+    fn push_u8(&mut self, _item: u8) {
+        self.acc += 1;
+    }
+
+    fn push_char(&mut self, chr: char) {
         self.acc += chr.len_utf8();
     }
 
     fn push_new_line(&mut self) {
-        self.push('\n');
+        self.push_char('\n');
     }
 
     fn push_str(&mut self, string: &str) {
         self.acc += string.len();
+    }
+
+    fn push_slice(&mut self, slice: &[u8]) {
+        self.acc += slice.len();
     }
 
     fn push_str_contains_new_line(&mut self, string: &str) {
@@ -267,7 +319,7 @@ mod to_string_tests {
 
     fn serializer<T: ToString>(t: &mut T) {
         t.push_str("Hello");
-        t.push(' ');
+        t.push_char(' ');
         t.push_str("World");
     }
 
